@@ -186,9 +186,9 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     if (currentUser?.role !== 'FARM_MANAGER') return;
     driverManagementApi.getScopes().then((items) => {
-      const unique = items.filter((item: any, index: number, all: any[]) => item.managementUnitId && all.findIndex((other) => other.managementUnitId === item.managementUnitId) === index);
+      const unique = items.filter((item: any, index: number, all: any[]) => all.findIndex((other) => other.complexCode === item.complexCode && other.managementUnitId === item.managementUnitId) === index);
       setManagerScopes(unique);
-      if (unique.length === 1) setManagerScopeId(String(unique[0].managementUnitId));
+      if (unique.length === 1 && unique[0].managementUnitId) setManagerScopeId(String(unique[0].managementUnitId));
     }).catch(() => setManagerScopes([]));
   }, [currentUser?.role]);
 
@@ -391,16 +391,17 @@ export const DashboardPage: React.FC = () => {
   }, [vehiclesList, gpsFilter, vehicleSearch]);
 
   const titleForKLH = selectedKLH === 'KOUN_MOM' ? 'KLH Koun Mom' : selectedKLH === 'SNOUL' ? 'KLH Snoul' : selectedKLH === 'NAM_LAO' ? 'KLH Nam Lào' : selectedKLH;
+  const hasComplexScope = managerScopes.some((scope) => !scope.managementUnitId);
 
   return (
     <div className="space-y-5 text-slate-800 antialiased pb-10 font-sans">
       {currentUser?.role === 'FARM_MANAGER' && (
         <section className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div><h2 className="font-extrabold text-emerald-950">Dashboard Đội trưởng cơ giới</h2><p className="text-xs text-emerald-700">Mỗi lần xem và điều hành đúng một khu vực.</p></div>
+            <div><h2 className="font-extrabold text-emerald-950">Dashboard Đội trưởng cơ giới</h2><p className="text-xs text-emerald-700">{hasComplexScope ? 'Phạm vi quản lý toàn khu liên hợp.' : 'Mỗi lần xem và điều hành đúng một khu vực.'}</p></div>
             <select className="h-10 rounded-xl border border-emerald-300 bg-white px-3 text-sm font-bold" value={managerScopeId} onChange={(event) => setManagerScopeId(event.target.value)}>
-              <option value="">{managerScopes.length > 1 ? 'Chọn khu vực quản lý...' : 'Chưa có phạm vi quản lý'}</option>
-              {managerScopes.map((scope: any) => <option key={scope.managementUnitId} value={scope.managementUnitId}>{scope.managementUnit?.code} · {scope.managementUnit?.name}</option>)}
+              <option value="">{hasComplexScope ? `Toàn bộ ${titleForKLH}` : managerScopes.length > 1 ? 'Chọn khu vực quản lý...' : 'Chưa có phạm vi quản lý'}</option>
+              {managerScopes.filter((scope) => scope.managementUnitId).map((scope: any) => <option key={scope.managementUnitId} value={scope.managementUnitId}>{scope.managementUnit?.code} · {scope.managementUnit?.name}</option>)}
             </select>
           </div>
           {managerDashboard && <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">{[
