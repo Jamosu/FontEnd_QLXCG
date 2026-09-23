@@ -7,6 +7,8 @@ import { Modal } from '../../components/common/Modal';
 import { apiClient, apiService } from '../../api/client';
 import { catalogsApi } from '../../api/catalogsApi';
 import { useAppStore } from '../../store/useAppStore';
+import { AuditUserPopover } from '../../components/common/AuditUserPopover';
+import { TableRowActions } from '../../components/common/TableRowActions';
 import {
   Plus,
   Download,
@@ -34,17 +36,25 @@ import {
   RotateCcw,
   Tag,
   Upload,
+  Package,
+  PackageCheck,
+  Gauge,
 } from 'lucide-react';
 
+
 import { SearchableSelect, SelectOption } from '../../components/common/SearchableSelect';
-import { INITIAL_CG_MANAGERS, MASTER_LOCATIONS, CGManagerItem } from '../../data/cgManagersData';
+import { driverManagementApi, DriverManagementUnit } from '../../api/driverManagementApi';
+import { buildManagementFilterManagers } from '../../hooks/useManagementFilterCatalog';
+import { OperationalLocation, schedulingApi } from '../../api/scheduling';
 import { parseOperationalImport, toIsoDate } from '../../utils/operationalExcelTemplates';
+import { normalizeMasterDataKey, uniqueMasterDataOptions } from '../../utils/masterDataNormalization';
 
 interface UnitAssignmentRecord {
   id: string;
   code?: string;
   vehicleCode: string;
-  plateNumber?: string;
+  plateNumber: string;
+  vehicleName?: string;
   vehicleType: string;
   assetGroup?: string;
   complexCode?: string;
@@ -60,7 +70,7 @@ interface UnitAssignmentRecord {
   assignedDate: string;
   purpose: string;
   transferHistory?: string;
-  status: 'active' | 'newly_assigned' | 'repair' | 'unassigned';
+  status: 'active' | 'newly_assigned' | 'maintenance' | 'repair' | 'unassigned';
 }
 
 interface ImplementItemRecord {
@@ -70,19 +80,22 @@ interface ImplementItemRecord {
   category: string;
   categoryLabel?: string;
   unit: string;
+  assignedUnitCode?: string | null;
   gatheringLocation?: string | null;
   managerName?: string | null;
   managerPhone?: string | null;
-  status: 'ATTACHED' | 'IN_DEPOT' | 'MAINTENANCE' | 'UNASSIGNED';
+  status: 'ATTACHED' | 'IN_DEPOT' | 'MAINTENANCE' | 'REPAIR' | 'UNASSIGNED';
   technicalCondition?: string;
   attachedVehicleCode?: string;
   attachedVehicleName?: string;
 }
 
 type CardFilter =
-  | 'ALL' | 'RUNNING' | 'WAITING' | 'REPAIR' | 'UNASSIGNED_UNIT'
+  | 'ALL' | 'RUNNING' | 'WAITING' | 'MAINTENANCE' | 'REPAIR' | 'UNASSIGNED_UNIT'
   // Row 2 — Thiết bị phụ trợ / Nông cụ đính kèm (Máy gắn: Dàn cày, Dàn bừa, Rơ-moóc...)
-  | 'EQUIP_ALL' | 'EQUIP_RUNNING' | 'EQUIP_WAITING' | 'EQUIP_REPAIR' | 'EQUIP_UNASSIGNED';
+  | 'EQUIP_ALL' | 'EQUIP_RUNNING' | 'EQUIP_WAITING' | 'EQUIP_MAINTENANCE' | 'EQUIP_REPAIR' | 'EQUIP_UNASSIGNED'
+  // Row 3 — Tài sản khác (hoạt động độc lập: xe máy, máy phát điện, xe nâng...)
+  | 'OTHER_ALL' | 'OTHER_ACTIVE' | 'OTHER_WAITING' | 'OTHER_MAINTENANCE' | 'OTHER_REPAIR' | 'OTHER_UNASSIGNED';
 
 export const UnitAssignmentPage: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<UnitAssignmentRecord | null>(null);
@@ -96,11 +109,16 @@ export const UnitAssignmentPage: React.FC = () => {
   const [modalImplementFilter, setModalImplementFilter] = useState<'ALL' | 'UNASSIGNED' | 'WAITING'>('ALL');
   
   // Transfer form state linked to master data
-  const [newUnit, setNewUnit] = useState(INITIAL_CG_MANAGERS[0]?.unitName || 'XN Chuối DP1');
-  const [newLocation, setNewLocation] = useState(MASTER_LOCATIONS[0] || 'Lô 21 DP1');
-  const [newManager, setNewManager] = useState(
-    INITIAL_CG_MANAGERS[0] ? `${INITIAL_CG_MANAGERS[0].managerName} (${INITIAL_CG_MANAGERS[0].phone})` : ''
-  );
+  const [newUnit, setNewUnit] = useState('');
+  const [newLocation, setNewLocation] = useState('');
+  const [newManager, setNewManager] = useState('');
+  const [managementTeams, setManagementTeams] = useState<DriverManagementUnit[]>([]);
+  const [managementLocations, setManagementLocations] = useState<OperationalLocation[]>([]);
+  const [sharedFilterOptions, setSharedFilterOptions] = useState<{
+    locations: string[];
+    implementCategories: Array<{ code: string; count: number }>;
+    vehicleTypes: Array<{ code: string; name: string; vehicleCount: number }>;
+  }>({ locations: [], implementCategories: [], vehicleTypes: [] });
   const [transferDate, setTransferDate] = useState('2026-08-26');
   const [transferPurpose, setTransferPurpose] = useState('');
 
@@ -111,6 +129,7 @@ export const UnitAssignmentPage: React.FC = () => {
     assignedUnit: 0,
     running: 0,
     waiting: 0,
+    maintenance: 0,
     repair: 0,
     unassignedUnit: 0,
     gpsAttached: 0,
@@ -121,14 +140,25 @@ export const UnitAssignmentPage: React.FC = () => {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const selectedKLH = useAppStore((state) => state.selectedKLH);
 
-  // Thống kê Hồ sơ Thiết bị & Nông cụ đính kèm (Lấy trực tiếp từ API /implements/statistics — 694 máy gắn)
   const [implementStats, setImplementStats] = React.useState({
-    total: 694,
-    running: 683,
+    total: 1026,
+    running: 1006,
     waiting: 0,
-    maintenance: 11,
+    maintenance: 19,
+    repair: 20,
     unassigned: 0,
   });
+
+  // Row 3 — Tài sản khác (isAssignable=false)
+  const [otherAssetStats, setOtherAssetStats] = React.useState({
+    total: 0,
+    active: 0,
+    waiting: 0,
+    maintenance: 0,
+    repair: 0,
+    unassigned: 0,
+  });
+  const [otherAssetsList, setOtherAssetsList] = React.useState<UnitAssignmentRecord[]>([]);
 
   // Memoized options for Select-Text controls with clear category tags
   const vehicleOptions = React.useMemo<SelectOption[]>(() => {
@@ -185,36 +215,33 @@ export const UnitAssignmentPage: React.FC = () => {
         label: '⚠️ [Chưa phân bổ] — Thu hồi về Tổng kho / Ban Cơ Giới',
         subLabel: 'Chuyển phương tiện về trạng thái Chưa phân bổ đơn vị',
       },
-      ...INITIAL_CG_MANAGERS.map((m) => ({
-        value: m.unitName,
-        label: m.unitName,
-        subLabel: m.location ? `Nơi tập kết: ${m.location}` : undefined,
+      ...managementTeams.map((team) => ({
+        value: team.code,
+        label: team.name,
+        subLabel: team.mainDepot?.name ? `Nơi tập kết: ${team.mainDepot.name}` : undefined,
       })),
     ];
-  }, []);
+  }, [managementTeams]);
 
   const locationOptions = React.useMemo<SelectOption[]>(() => {
-    return MASTER_LOCATIONS.map((loc) => ({
-      value: loc,
-      label: loc,
+    return managementLocations.map((location) => ({
+      value: location.name,
+      label: location.name,
     }));
-  }, []);
+  }, [managementLocations]);
 
   const managerOptions = React.useMemo<SelectOption[]>(() => {
-    return INITIAL_CG_MANAGERS.map((m) => {
-      const val = m.managerName
-        ? `${m.managerName} (${m.phone || 'N/A'})`
-        : `${m.unitName} - Ban Cơ Giới`;
-      const label = m.managerName
-        ? `${m.managerName} - ${m.unitName} (SĐT: ${m.phone || 'N/A'})`
-        : `${m.unitName} (Chưa có tên)`;
+    return managementTeams.flatMap((team) => {
+      const manager = team.currentManager?.manager;
+      if (!manager) return [];
+      const value = `${manager.fullName} (${manager.phone || ''})`;
       return {
-        value: val,
-        label: label,
-        subLabel: m.location ? `Nơi tập kết: ${m.location}` : undefined,
+        value,
+        label: `${manager.fullName} - ${team.name}${manager.phone ? ` (SĐT: ${manager.phone})` : ''}`,
+        subLabel: team.mainDepot?.name ? `Nơi tập kết: ${team.mainDepot.name}` : undefined,
       };
     });
-  }, []);
+  }, [managementTeams]);
 
   // Handle when selecting or typing a Unit
   const handleSelectNewUnit = (unitName: string) => {
@@ -224,13 +251,16 @@ export const UnitAssignmentPage: React.FC = () => {
       setNewManager('Chờ phân bổ đơn vị');
       return;
     }
-    const matched = INITIAL_CG_MANAGERS.find(
-      (m) => m.unitName.toLowerCase() === unitName.toLowerCase()
+    const matched = managementTeams.find(
+      (team) => team.code.toLowerCase() === unitName.toLowerCase() || team.name.toLowerCase() === unitName.toLowerCase()
     );
     if (matched) {
-      if (matched.location) setNewLocation(matched.location);
-      if (matched.managerName) {
-        setNewManager(`${matched.managerName} (${matched.phone || 'N/A'})`);
+      if (matched.mainDepot?.name) setNewLocation(matched.mainDepot.name);
+      if (matched.currentManager?.manager) {
+        const manager = matched.currentManager.manager;
+        setNewManager(`${manager.fullName} (${manager.phone || ''})`);
+      } else {
+        setNewManager('');
       }
     }
   };
@@ -238,13 +268,14 @@ export const UnitAssignmentPage: React.FC = () => {
   // Handle when selecting or typing a Location
   const handleSelectNewLocation = (locationText: string) => {
     setNewLocation(locationText);
-    const matched = INITIAL_CG_MANAGERS.find(
-      (m) => m.location.toLowerCase() === locationText.toLowerCase()
+    const matched = managementTeams.find(
+      (team) => team.mainDepot?.name.toLowerCase() === locationText.toLowerCase()
     );
     if (matched) {
-      setNewUnit(matched.unitName);
-      if (matched.managerName) {
-        setNewManager(`${matched.managerName} (${matched.phone || 'N/A'})`);
+      setNewUnit(matched.code);
+      if (matched.currentManager?.manager) {
+        const manager = matched.currentManager.manager;
+        setNewManager(`${manager.fullName} (${manager.phone || ''})`);
       }
     }
   };
@@ -252,15 +283,14 @@ export const UnitAssignmentPage: React.FC = () => {
   // Handle when selecting or typing a Manager
   const handleSelectNewManager = (managerText: string) => {
     setNewManager(managerText);
-    const matched = INITIAL_CG_MANAGERS.find(
-      (m) =>
-        `${m.managerName} (${m.phone || 'N/A'})`.toLowerCase() === managerText.toLowerCase() ||
-        m.managerName.toLowerCase() === managerText.toLowerCase() ||
-        managerText.toLowerCase().includes(m.managerName.toLowerCase())
+    const matched = managementTeams.find(
+      (team) => team.currentManager?.manager &&
+        (`${team.currentManager.manager.fullName} (${team.currentManager.manager.phone || ''})`.toLowerCase() === managerText.toLowerCase() ||
+          team.currentManager.manager.fullName.toLowerCase() === managerText.toLowerCase())
     );
     if (matched) {
-      setNewUnit(matched.unitName);
-      if (matched.location) setNewLocation(matched.location);
+      setNewUnit(matched.code);
+      if (matched.mainDepot?.name) setNewLocation(matched.mainDepot.name);
     }
   };
 
@@ -276,11 +306,13 @@ export const UnitAssignmentPage: React.FC = () => {
       const parsedManagerName = isUnassigning ? 'Chờ phân bổ đơn vị' : (newManager.replace(/\s*\([^)]*\)/, '').trim() || 'Chưa gán NS quản lý');
       const parsedManagerPhone = isUnassigning ? '' : (newManager.match(/\(([^)]+)\)/)?.[1] || '');
       const locationVal = isUnassigning ? 'Tổng kho KLH' : (newLocation || currentSelectedVehicle.oldLocation || 'Bãi xe Trung tâm');
+      const selectedTeam = managementTeams.find((team) => team.code === newUnit || team.name === newUnit);
 
       const numericId = parseInt(currentSelectedVehicle.id.replace(/\D/g, ''), 10);
       if (!isNaN(numericId)) {
         await apiService.updateVehicle(numericId, {
           assignedUnitCode: isUnassigning ? null : newUnit,
+          managementUnitId: isUnassigning ? null : selectedTeam?.id,
           currentLocationName: locationVal,
           managerName: parsedManagerName,
           managerPhone: parsedManagerPhone,
@@ -326,6 +358,7 @@ export const UnitAssignmentPage: React.FC = () => {
             assignedUnit: statData.assignedUnit || 0,
             running: statData.running || 0,
             waiting: statData.waitingDispatch || 0,
+            maintenance: statData.maintenance || 0,
             repair: statData.repair || 0,
             unassignedUnit: statData.unassignedUnit || 0,
             gpsAttached: statData.gpsAttached || 0,
@@ -355,28 +388,40 @@ export const UnitAssignmentPage: React.FC = () => {
 
       if (currentImp.id) {
         await apiClient.patch(`/implements/${currentImp.id}`, {
-          unit: isUnassigning ? 'BAN_CO_GIOI' : newUnit,
+          unit: isUnassigning ? 'KOUN_MOM' : 'KOUN_MOM',
+          assignedUnitCode: isUnassigning ? null : newUnit,
           gatheringLocation: locationVal,
           managerName: parsedManagerName,
           managerPhone: parsedManagerPhone,
         }).catch(() => null);
       }
 
-      setImplementsList((prev) =>
-        prev.map((item) => {
+      setImplementsList((prev) => {
+        const next = prev.map((item) => {
           if (item.id === currentImp.id) {
             return {
               ...item,
               unit: unitVal,
+              assignedUnitCode: isUnassigning ? null : newUnit,
               gatheringLocation: locationVal,
               managerName: parsedManagerName,
               managerPhone: parsedManagerPhone,
-              status: isUnassigning ? 'UNASSIGNED' : 'ATTACHED',
+              status: isUnassigning ? ('UNASSIGNED' as const) : ('ATTACHED' as const),
             };
           }
           return item;
-        })
-      );
+        });
+        const unassignedCount = next.filter((i) => i.status === 'UNASSIGNED').length;
+        const maintCount = next.filter((i) => i.status === 'MAINTENANCE').length;
+        const repairCount = next.filter((i) => i.status === 'REPAIR').length;
+        const runningCount = next.length - maintCount - repairCount - unassignedCount;
+        setImplementStats((s) => ({
+          ...s,
+          running: runningCount,
+          unassigned: unassignedCount,
+        }));
+        return next;
+      });
 
       setShowImplementHandoverModal(false);
     } catch (err) {
@@ -390,10 +435,25 @@ export const UnitAssignmentPage: React.FC = () => {
     setLoading(true);
 
     const complexParam = selectedKLH !== 'ALL' ? selectedKLH : undefined;
+    const [teams, locations] = await Promise.all([
+      driverManagementApi.getUnits({ level: 'TEAM', status: 'ACTIVE', complexCode: complexParam }),
+      schedulingApi.locations({ type: 'DEPOT', active: true, complexCode: complexParam }),
+    ]).catch(() => [[], []] as [DriverManagementUnit[], OperationalLocation[]]);
+    setManagementTeams(teams);
+    setManagementLocations(locations);
+
+    Promise.all([
+      apiService.getVehicleFilterOptions({ complexCode: complexParam, isAssignable: true }),
+      apiService.getImplementFilterOptions({ unit: complexParam }),
+    ]).then(([vehicleOptions, implementOptions]) => setSharedFilterOptions({
+      locations: uniqueMasterDataOptions([...(vehicleOptions.locations || []), ...(implementOptions.locations || []), ...locations.map((location) => location.name)]),
+      implementCategories: implementOptions.categories || [],
+      vehicleTypes: vehicleOptions.vehicleTypes || [],
+    })).catch(() => null);
 
     // 1. Fetch statistics for vehicles
     apiClient
-      .get('/vehicles/statistics', { params: { complexCode: complexParam } })
+      .get('/vehicles/statistics', { params: { complexCode: complexParam, isAssignable: true } })
       .then((statRes) => {
         const statData = statRes?.data?.data || statRes?.data;
         if (statData) {
@@ -402,6 +462,7 @@ export const UnitAssignmentPage: React.FC = () => {
             assignedUnit: statData.assignedUnit || 0,
             running: statData.running || 0,
             waiting: statData.waitingDispatch || 0,
+            maintenance: statData.maintenance || 0,
             repair: statData.repair || 0,
             unassignedUnit: statData.unassignedUnit || 0,
             gpsAttached: statData.gpsAttached || 0,
@@ -410,28 +471,30 @@ export const UnitAssignmentPage: React.FC = () => {
       })
       .catch(() => null);
 
-    // 1.1. Fetch statistics for Agricultural Implements (Row 2 — 694 máy gắn đính kèm)
+    // 1.1. Fetch statistics for Agricultural Implements (Row 2 — 1.026 thiết bị phụ trợ & nông cụ)
     apiService
       .getImplementStatistics()
       .then((data) => {
         if (data) {
-          const total = data.totalImplements || 694;
-          const maint = data.maintenance || 11;
-          const unassigned = 0;
+          const total = data.totalImplements || 1026;
+          const maint = data.condition?.wornOut ?? (data.maintenance || 19);
+          const rep = data.condition?.needRepair || 16;
+          const unassigned = data.unassignedUnit ?? 336;
           const waiting = 0;
-          const running = total - maint - waiting - unassigned;
+          const running = total - maint - rep - waiting - unassigned;
           setImplementStats({
             total,
             running,
             waiting,
             maintenance: maint,
+            repair: rep,
             unassigned,
           });
         }
       })
       .catch(() => null);
 
-    // 1.2. Fetch all 694 implements for table display
+    // 1.2. Fetch all implements for table display
     apiService
       .getAllImplements()
       .then((res) => {
@@ -446,25 +509,47 @@ export const UnitAssignmentPage: React.FC = () => {
             DAN_PHUN_THUOC: 'Dàn phun thuốc',
           };
           const mapped: ImplementItemRecord[] = items.map((it: any) => {
-            const isRepair = it.status === 'MAINTENANCE';
-            const isUnassigned = it.unit === 'Chưa phân bổ' || !it.unit;
+            const isMaintenance = it.technicalCondition === 'WORN_OUT';
+            const isRepair = it.technicalCondition === 'NEED_REPAIR' || (it.status === 'MAINTENANCE' && it.technicalCondition !== 'WORN_OUT');
+            const isUnassigned = !it.assignedUnitCode || it.assignedUnitCode === 'Chưa phân bổ' || it.assignedUnitCode.trim() === '';
             return {
               id: it.id,
               code: it.code,
               name: it.name,
               category: it.category,
               categoryLabel: CATEGORY_NAMES[it.category] || it.category,
-              unit: it.unit || 'BAN_CO_GIOI',
-              gatheringLocation: it.gatheringLocation || 'Lô 85 DP4',
-              managerName: it.managerName || 'Phạm Ngọc Hải',
-              managerPhone: it.managerPhone || '0825456565',
-              status: isRepair ? 'MAINTENANCE' : (isUnassigned ? 'UNASSIGNED' : 'ATTACHED'),
-              technicalCondition: it.technicalCondition || (isRepair ? 'NEED_REPAIR' : 'GOOD'),
-              attachedVehicleCode: it.currentVehicle?.code || 'Đang vận hành',
-              attachedVehicleName: it.currentVehicle?.name || '',
+              unit: isUnassigned ? 'Chưa phân bổ' : (it.assignedUnitCode || 'Chưa phân bổ'),
+              assignedUnitCode: it.assignedUnitCode || null,
+              gatheringLocation: it.gatheringLocation || null,
+              managerName: it.managementUnit?.managerAssignments?.[0]?.manager?.fullName || it.managerName || null,
+              managerPhone: it.managementUnit?.managerAssignments?.[0]?.manager?.phone || it.managerPhone || null,
+              status: isUnassigned
+                ? 'UNASSIGNED'
+                : isMaintenance
+                ? 'MAINTENANCE'
+                : isRepair
+                ? 'REPAIR'
+                : (it.status || 'IN_DEPOT'),
+              technicalCondition: it.technicalCondition,
+              attachedVehicleCode: it.currentVehicle ? it.currentVehicle.code : undefined,
+              attachedVehicleName: it.currentVehicle ? it.currentVehicle.name : undefined,
             };
           });
           setImplementsList(mapped);
+
+          // Cập nhật lại implementStats từ danh sách thực để đảm bảo độ chính xác tuyệt đối
+          const unassignedCount = mapped.filter((i) => i.status === 'UNASSIGNED').length;
+          const maintCount = mapped.filter((i) => i.status === 'MAINTENANCE').length;
+          const repairCount = mapped.filter((i) => i.status === 'REPAIR').length;
+          const runningCount = mapped.length - maintCount - repairCount - unassignedCount;
+          setImplementStats((prev) => ({
+            ...prev,
+            total: mapped.length,
+            running: runningCount,
+            maintenance: maintCount,
+            repair: repairCount,
+            unassigned: unassignedCount,
+          }));
         }
       })
       .catch(() => null);
@@ -472,28 +557,30 @@ export const UnitAssignmentPage: React.FC = () => {
     // 2. Fetch vehicle list for table
     try {
       const res = await apiClient.get('/vehicles/assignments', {
-        params: { limit: 4000, complexCode: complexParam },
+        params: { limit: 4000, complexCode: complexParam, isAssignable: true },
       });
       const items = res.data?.data?.items || res.data?.items || res.data || [];
 
       if (Array.isArray(items) && items.length > 0) {
         const mapped: UnitAssignmentRecord[] = items.map((v: any) => {
           const isUnassigned = !v.assignedUnitCode || v.assignedUnitCode.trim() === '';
-          const matchedCg = !isUnassigned
-            ? INITIAL_CG_MANAGERS.find(
-                (cg) => cg.unitName.toLowerCase() === (v.assignedUnitCode || v.unit || '').toLowerCase()
+          const matchedTeam = !isUnassigned
+            ? teams.find((team) =>
+                team.id === v.managementUnitId ||
+                team.code.toLowerCase() === (v.assignedUnitCode || v.unit || '').toLowerCase() ||
+                team.name.toLowerCase() === (v.assignedUnitCode || v.unit || '').toLowerCase()
               )
             : undefined;
 
           const unitName = isUnassigned
             ? 'Chưa phân bổ'
-            : v.assignedUnitCode || v.unit || 'Chưa phân bổ';
+            : matchedTeam?.name || v.assignedUnitCode || v.unit || 'Chưa phân bổ';
 
-          const managerName = v.managerName || matchedCg?.managerName || '';
-          const managerPhone = v.managerPhone || matchedCg?.phone || '';
+          const managerName = matchedTeam?.currentManager?.manager?.fullName || v.managerName || '';
+          const managerPhone = matchedTeam?.currentManager?.manager?.phone || v.managerPhone || '';
 
-          const oldManagerName = v.managerName || matchedCg?.managerName || (isUnassigned ? 'Tổng kho / Ban Cơ Giới' : 'Chưa gán quản lý');
-          const oldManagerPhone = v.managerPhone || matchedCg?.phone || '';
+          const oldManagerName = managerName || (isUnassigned ? 'Tổng kho / Ban Cơ Giới' : 'Chưa gán quản lý');
+          const oldManagerPhone = managerPhone;
 
           const driverName = isUnassigned
             ? 'Chờ phân bổ đơn vị'
@@ -519,18 +606,20 @@ export const UnitAssignmentPage: React.FC = () => {
             }
           }
 
+          const vTypeName = v.vehicleType?.name || v.category || 'Xe / máy chuyên dùng';
           return {
             id: `ASG-${v.id}`,
             code: v.code,
             vehicleCode: v.code,
             plateNumber: v.plate || '—',
-            vehicleType: v.name,
+            vehicleType: vTypeName,
+            vehicleName: v.name,
             assetGroup: v.assetGroup || v.vehicleType?.assetGroup || 'THIET_BI_PHU_TRO',
             complexCode: v.complexCode,
             regionCode: v.regionCode,
             unitName: unitName,
             oldUnitName: v.unit || 'Ban Cơ Giới KLH',
-            oldLocation: v.currentLocationName || matchedCg?.location || (isUnassigned ? 'Tổng kho KLH' : 'Bãi xe Trung tâm'),
+            oldLocation: v.currentLocationName || matchedTeam?.mainDepot?.name || (isUnassigned ? 'Tổng kho KLH' : 'Chưa thiết lập bãi xe'),
             oldManager: oldManagerName,
             oldManagerPhone: oldManagerPhone,
             driverName: driverName,
@@ -545,6 +634,8 @@ export const UnitAssignmentPage: React.FC = () => {
               ? ('active' as const)
               : v.status === 'CHO_PHAN_CONG'
               ? ('newly_assigned' as const)
+              : v.status === 'BAO_DUONG'
+              ? ('maintenance' as const)
               : ('repair' as const),
           };
         });
@@ -561,7 +652,67 @@ export const UnitAssignmentPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+
+    // 3. Fetch Row 3 — Tài sản khác (isAssignable=false)
+    apiClient
+      .get('/vehicles/statistics', { params: { complexCode: complexParam, isAssignable: false } })
+      .then((res: any) => {
+        const d = res?.data?.data || res?.data;
+        if (d) {
+          const total = Number(d.totalVehicles || 0);
+          const maintenance = Number(d.maintenance || 0);
+          const repair = Number(d.repair || 0);
+          const unassigned = Number(d.unassignedUnit || 0);
+          const active = total - maintenance - repair - unassigned;
+          setOtherAssetStats({ total, active: Math.max(0, active), waiting: 0, maintenance, repair, unassigned });
+        }
+      })
+      .catch(() => null);
+
+    apiClient
+      .get('/vehicles/assignments', { params: { limit: 4000, complexCode: complexParam, isAssignable: false } })
+      .then((res: any) => {
+        const items = res.data?.data?.items || res.data?.items || res.data || [];
+        if (Array.isArray(items) && items.length > 0) {
+          const mapped: UnitAssignmentRecord[] = items.map((v: any) => {
+            const isUnassigned = !v.assignedUnitCode || v.assignedUnitCode.trim() === '';
+            const unitName = isUnassigned ? 'Chưa phân bổ' : (v.assignedUnitCode || v.unit || 'Chưa phân bổ');
+            return {
+              id: `OTH-${v.id}`,
+              code: v.code,
+              vehicleCode: v.code,
+              plateNumber: '—',
+              vehicleType: v.vehicleType?.name || v.category || 'Tài sản khác',
+              vehicleName: v.name,
+              assetGroup: 'THIET_BI_PHU_TRO',
+              complexCode: v.complexCode,
+              regionCode: v.regionCode,
+              unitName,
+              oldUnitName: v.unit || 'Chưa phân bổ',
+              oldLocation: v.currentLocationName || 'Chưa thiết lập',
+              oldManager: v.managerName || '',
+              oldManagerPhone: v.managerPhone || '',
+              driverName: v.managerName || 'Chưa gán NS quản lý',
+              driverPhone: v.managerPhone || '',
+              driverCode: '—',
+              assignedDate: '—',
+              purpose: v.notes || '',
+              transferHistory: '',
+              status: isUnassigned
+                ? ('unassigned' as const)
+                : v.status === 'HOAT_DONG' ? ('active' as const)
+                : v.status === 'BAO_DUONG' ? ('maintenance' as const)
+                : ('repair' as const),
+            };
+          });
+          setOtherAssetsList(mapped);
+        } else {
+          setOtherAssetsList([]);
+        }
+      })
+      .catch(() => null);
   }, [selectedKLH]);
+
 
   useEffect(() => {
     void fetchAssignments();
@@ -594,7 +745,7 @@ export const UnitAssignmentPage: React.FC = () => {
           const item = implementsList.find((entry) => entry.code === row.itemCode);
           if (!item) throw new Error(`Không tìm thấy nông cụ ${row.itemCode}.`);
           const rawUnit = String(row.newUnitName).toUpperCase();
-          const unit = ['NT1', 'NT2', 'XN_BO', 'TT_BTSC', 'BAN_CO_GIOI', 'TOAN_KLH'].includes(rawUnit) ? rawUnit : 'BAN_CO_GIOI';
+          const unit = ['KOUN_MOM', 'KOUN_MOM', 'KOUN_MOM', 'KOUN_MOM', 'KOUN_MOM', 'TOAN_KLH'].includes(rawUnit) ? rawUnit : 'KOUN_MOM';
           await apiService.updateImplement(item.id, {
             unit,
             gatheringLocation: row.newLocation,
@@ -669,101 +820,192 @@ export const UnitAssignmentPage: React.FC = () => {
 
   // 1. Danh sách đơn vị sử dụng
   const unitFilterOptions = React.useMemo<SelectOption[]>(() => {
-    const units = new Set<string>();
+    const counts = new Map<string, number>();
     assignmentsList.forEach((a) => {
-      if (a.unitName && a.unitName !== '—') units.add(a.unitName);
+      if (a.unitName && a.unitName !== '—') {
+        const key = normalizeMasterDataKey(a.unitName);
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
     });
     implementsList.forEach((i) => {
-      if (i.unit && i.unit !== '—') units.add(i.unit);
+      if (i.unit && i.unit !== '—') {
+        const key = normalizeMasterDataKey(i.unit);
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
     });
-    INITIAL_CG_MANAGERS.forEach((m) => {
-      if (m.unitName) units.add(m.unitName);
-    });
-    return Array.from(units)
-      .sort((a, b) => a.localeCompare(b, 'vi'))
-      .map((u) => ({
-        value: u,
-        label: u,
-        subLabel: u === 'Chưa phân bổ' ? '⚠️ Chưa gán nông trường' : undefined,
-      }));
-  }, [assignmentsList, implementsList]);
+    const unassignedCount = assignmentsList.filter(a => !a.unitName || a.unitName === '—' || a.unitName === 'Chưa phân bổ' || a.status === 'unassigned').length
+      + implementsList.filter(i => !i.unit || i.unit === '—' || i.unit === 'Chưa phân bổ').length;
+
+    const list: SelectOption[] = [];
+    if (unassignedCount > 0) {
+      list.push({
+        value: '__UNASSIGNED__',
+        label: 'Chưa phân bổ đơn vị (Không có dữ liệu)',
+        subLabel: `${unassignedCount.toLocaleString('vi-VN')} tài sản`,
+      });
+    }
+
+    managementTeams
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+      .forEach((unit) => {
+        const count = counts.get(normalizeMasterDataKey(unit.name)) || 0;
+        list.push({
+          value: unit.name,
+          label: unit.name,
+          subLabel: `${count.toLocaleString('vi-VN')} tài sản`,
+        });
+      });
+
+    return list;
+  }, [assignmentsList, implementsList, managementTeams]);
 
   // 2. Danh sách nơi tập kết
   const locationFilterOptions = React.useMemo<SelectOption[]>(() => {
-    const locs = new Set<string>(MASTER_LOCATIONS);
+    const counts = new Map<string, number>();
+    assignmentsList.forEach((a) => {
+      if (a.oldLocation && a.oldLocation !== '—') counts.set(a.oldLocation, (counts.get(a.oldLocation) || 0) + 1);
+    });
+    implementsList.forEach((i) => {
+      if (i.gatheringLocation && i.gatheringLocation !== '—') counts.set(i.gatheringLocation, (counts.get(i.gatheringLocation) || 0) + 1);
+    });
+    const locs = new Set<string>([...sharedFilterOptions.locations, ...managementLocations.map((location) => location.name)]);
     assignmentsList.forEach((a) => {
       if (a.oldLocation && a.oldLocation !== '—') locs.add(a.oldLocation);
     });
     implementsList.forEach((i) => {
       if (i.gatheringLocation && i.gatheringLocation !== '—') locs.add(i.gatheringLocation);
     });
-    return Array.from(locs)
-      .sort((a, b) => a.localeCompare(b, 'vi'))
-      .map((loc) => ({
-        value: loc,
-        label: loc,
-      }));
-  }, [assignmentsList, implementsList]);
 
-  // 3. Danh sách chủng loại xe & nông cụ
+    const unassignedCount = assignmentsList.filter(a => !a.oldLocation || a.oldLocation === '—' || a.oldLocation.includes('Chưa')).length
+      + implementsList.filter(i => !i.gatheringLocation || i.gatheringLocation === '—' || i.gatheringLocation.includes('Chưa')).length;
+
+    const list: SelectOption[] = [];
+    if (unassignedCount > 0) {
+      list.push({
+        value: '__UNASSIGNED__',
+        label: 'Chưa có nơi tập kết (Không có dữ liệu)',
+        subLabel: `${unassignedCount.toLocaleString('vi-VN')} tài sản`,
+      });
+    }
+
+    uniqueMasterDataOptions(Array.from(locs))
+      .forEach((loc) => {
+        list.push({
+          value: loc,
+          label: loc,
+          subLabel: `${(counts.get(loc) || 0).toLocaleString('vi-VN')} tài sản`,
+        });
+      });
+
+    return list;
+  }, [assignmentsList, implementsList, managementLocations, sharedFilterOptions.locations]);
+
+  // 3. Danh sách chủng loại xe & nông cụ chuẩn (22 loại xe + 6 loại nông cụ)
   const categoryFilterOptions = React.useMemo<SelectOption[]>(() => {
-    const cats = new Set<string>();
+    const vehicleCats = new Set<string>(sharedFilterOptions.vehicleTypes.map((item) => item.name));
+    const implementCats = new Set<string>();
+    const vCounts = new Map<string, number>();
+    const iCounts = new Map<string, number>();
+
     assignmentsList.forEach((a) => {
-      if (a.vehicleType && a.vehicleType !== '—') cats.add(a.vehicleType);
+      if (a.vehicleType && a.vehicleType !== '—') {
+        const cat = a.vehicleType.normalize('NFC').trim();
+        vehicleCats.add(cat);
+        vCounts.set(cat, (vCounts.get(cat) || 0) + 1);
+      }
     });
+
     implementsList.forEach((i) => {
-      if (i.name && i.name !== '—') cats.add(i.name);
+      const cat = (i.categoryLabel || i.name || '').normalize('NFC').trim();
+      if (cat && cat !== '—') {
+        implementCats.add(cat);
+        iCounts.set(cat, (iCounts.get(cat) || 0) + 1);
+      }
     });
-    return Array.from(cats)
-      .sort((a, b) => a.localeCompare(b, 'vi'))
+
+    const vList = uniqueMasterDataOptions(Array.from(vehicleCats))
       .map((cat) => ({
         value: cat,
         label: cat,
+        subLabel: `${vCounts.get(cat) || 0} xe`,
       }));
-  }, [assignmentsList, implementsList]);
+
+    const iList = uniqueMasterDataOptions(Array.from(implementCats))
+      .map((cat) => ({
+        value: cat,
+        label: cat,
+        subLabel: `${iCounts.get(cat) || 0} thiết bị`,
+      }));
+
+    return [...vList, ...iList];
+  }, [assignmentsList, implementsList, sharedFilterOptions.vehicleTypes]);
 
   // 4. Danh sách NS quản lý cơ giới
   const managerFilterOptions = React.useMemo<SelectOption[]>(() => {
-    const managers = new Map<string, string>();
-    assignmentsList.forEach((a) => {
-      if (a.driverName && a.driverName !== '—' && !a.driverName.includes('Chưa')) {
-        managers.set(a.driverName, a.driverPhone || '');
-      }
-    });
-    implementsList.forEach((i) => {
-      if (i.managerName && i.managerName !== '—' && !i.managerName.includes('Chưa')) {
-        managers.set(i.managerName, i.managerPhone || '');
-      }
-    });
-    INITIAL_CG_MANAGERS.forEach((m) => {
-      if (m.managerName) {
-        managers.set(m.managerName, m.phone || '');
-      }
-    });
-    return Array.from(managers.entries())
-      .sort((a, b) => a[0].localeCompare(b[0], 'vi'))
-      .map(([name, phone]) => ({
-        value: name,
-        label: name,
-        subLabel: phone ? `SĐT: ${phone}` : undefined,
-      }));
-  }, [assignmentsList, implementsList]);
+    const unassignedCount = assignmentsList.filter(a => !a.driverName || a.driverName === '—' || a.driverName.includes('Chưa')).length
+      + implementsList.filter(i => !(i as any).managerName || (i as any).managerName === '—' || (i as any).managerName.includes('Chưa')).length;
+
+    const list: SelectOption[] = [];
+    if (unassignedCount > 0) {
+      list.push({
+        value: '__UNASSIGNED__',
+        label: 'Chưa phân nhân sự quản lý (Không có dữ liệu)',
+        subLabel: `${unassignedCount.toLocaleString('vi-VN')} tài sản`,
+      });
+    }
+
+    const managers = buildManagementFilterManagers(managementTeams);
+    managers
+      .forEach((manager) => {
+        const managerKey = normalizeMasterDataKey(manager.name);
+        const count = assignmentsList.filter((item) => normalizeMasterDataKey(item.driverName || '') === managerKey).length
+          + implementsList.filter((item) => normalizeMasterDataKey(item.managerName || '') === managerKey).length;
+        list.push({
+          value: String(manager.id),
+          label: manager.name,
+          subLabel: [manager.phone ? `SĐT: ${manager.phone}` : '', `${count.toLocaleString('vi-VN')} tài sản`].filter(Boolean).join(' · '),
+        });
+      });
+
+    return list;
+  }, [assignmentsList, implementsList, managementTeams]);
+
+  const selectedManagerName = selectedManagerFilter === 'ALL'
+    ? ''
+    : buildManagementFilterManagers(managementTeams).find((manager) => String(manager.id) === selectedManagerFilter)?.name || '';
 
   // 5. Trạng thái bàn giao
-  const statusFilterOptions: SelectOption[] = [
-    { value: 'active', label: 'Đang sử dụng tại đơn vị', subLabel: 'Đang vận hành' },
-    { value: 'newly_assigned', label: 'Mới bàn giao / Sẵn sàng', subLabel: 'Sẵn sàng điều động' },
-    { value: 'repair', label: 'Đang BTSC & Trạm cơ điện', subLabel: 'Bảo dưỡng / Sửa chữa' },
-    { value: 'UNASSIGNED', label: '⚠️ Chưa phân bổ đơn vị', subLabel: 'Chờ cấp phát' },
-  ];
+  const statusFilterOptions: SelectOption[] = React.useMemo(() => {
+    const activeCount = assignmentsList.filter(a => a.status === 'active').length + implementsList.filter(i => i.status === 'ATTACHED' || i.status === 'IN_DEPOT').length;
+    const newCount = assignmentsList.filter(a => a.status === 'newly_assigned').length;
+    const maintCount = assignmentsList.filter(a => a.status === 'maintenance').length + implementsList.filter(i => i.status === 'MAINTENANCE').length;
+    const repCount = assignmentsList.filter(a => a.status === 'repair').length + implementsList.filter(i => i.status === 'REPAIR').length;
+    const unassignedCount = assignmentsList.filter(a => a.status === 'unassigned').length + implementsList.filter(i => !i.unit || i.unit === 'Chưa phân bổ').length;
+    return [
+      { value: 'active', label: 'Đang sử dụng tại đơn vị', subLabel: `${activeCount} tài sản` },
+      { value: 'newly_assigned', label: 'Mới bàn giao / Sẵn sàng', subLabel: `${newCount} tài sản` },
+      { value: 'maintenance', label: 'Đang bảo dưỡng định kỳ', subLabel: `${maintCount} tài sản` },
+      { value: 'repair', label: 'Đang sửa chữa hư hỏng', subLabel: `${repCount} tài sản` },
+      { value: 'UNASSIGNED', label: '⚠️ Chưa phân bổ đơn vị', subLabel: `${unassignedCount} tài sản` },
+    ];
+  }, [assignmentsList, implementsList]);
 
   // 6. Phân nhóm tài sản
-  const groupFilterOptions: SelectOption[] = [
-    { value: 'MAY_NONG_NGHIEP', label: 'Máy nông nghiệp', subLabel: 'Máy kéo, liên hợp...' },
-    { value: 'MAY_CONG_TRINH', label: 'Máy công trình', subLabel: 'Máy đào, máy ủi...' },
-    { value: 'XE_VAN_TAI_BON', label: 'Xe vận tải & bồn', subLabel: 'Xe ben, xe bồn...' },
-    { value: 'THIET_BI_PHU_TRO', label: 'Thiết bị & Nông cụ', subLabel: 'Dàn cày, bừa, rơ-moóc...' },
-  ];
+  const groupFilterOptions: SelectOption[] = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    assignmentsList.forEach(a => {
+      const g = (a as any).assetGroup || 'MAY_NONG_NGHIEP';
+      counts[g] = (counts[g] || 0) + 1;
+    });
+    const implCount = implementsList.length;
+    return [
+      { value: 'MAY_NONG_NGHIEP', label: 'Máy nông nghiệp', subLabel: `${counts['MAY_NONG_NGHIEP'] || 0} xe` },
+      { value: 'MAY_CONG_TRINH', label: 'Máy công trình', subLabel: `${counts['MAY_CONG_TRINH'] || 0} xe` },
+      { value: 'XE_VAN_TAI_BON', label: 'Xe vận tải & bồn', subLabel: `${counts['XE_VAN_TAI_BON'] || 0} xe` },
+      { value: 'THIET_BI_PHU_TRO', label: 'Thiết bị & Nông cụ', subLabel: `${implCount} bộ` },
+    ];
+  }, [assignmentsList, implementsList]);
 
   const activeFilterCount = [
     selectedUnitFilter !== 'ALL',
@@ -798,6 +1040,9 @@ export const UnitAssignmentPage: React.FC = () => {
         const isUn = item.unitName === 'Chưa phân bổ' || item.unitName.includes('Chưa') || item.status === 'unassigned';
         if (isUn || item.status !== 'newly_assigned') return false;
       }
+      if (cardFilter === 'MAINTENANCE') {
+        if (item.status !== 'maintenance') return false;
+      }
       if (cardFilter === 'REPAIR') {
         if (item.status !== 'repair') return false;
       }
@@ -823,31 +1068,40 @@ export const UnitAssignmentPage: React.FC = () => {
 
       // 3. Unit Filter
       if (selectedUnitFilter !== 'ALL') {
-        if (selectedUnitFilter === 'UNASSIGNED') {
-          const isUn = item.unitName === 'Chưa phân bổ' || item.unitName.includes('Chưa');
+        if (selectedUnitFilter === 'UNASSIGNED' || selectedUnitFilter === '__UNASSIGNED__') {
+          const isUn = !item.unitName || item.unitName === '—' || item.unitName === 'Chưa phân bổ' || item.unitName.includes('Chưa') || item.status === 'unassigned';
           if (!isUn) return false;
-        } else if (item.unitName.toLowerCase() !== selectedUnitFilter.toLowerCase()) {
+        } else if (normalizeMasterDataKey(item.unitName) !== normalizeMasterDataKey(selectedUnitFilter)) {
           return false;
         }
       }
 
       // 4. Location Filter
       if (selectedLocationFilter !== 'ALL') {
-        if (item.oldLocation.toLowerCase() !== selectedLocationFilter.toLowerCase()) {
+        if (selectedLocationFilter === 'UNASSIGNED' || selectedLocationFilter === '__UNASSIGNED__') {
+          const isUn = !item.oldLocation || item.oldLocation === '—' || item.oldLocation.includes('Chưa');
+          if (!isUn) return false;
+        } else if (normalizeMasterDataKey(item.oldLocation) !== normalizeMasterDataKey(selectedLocationFilter)) {
           return false;
         }
       }
 
       // 5. Category Filter
       if (selectedCategoryFilter !== 'ALL') {
-        if (item.vehicleType.toLowerCase() !== selectedCategoryFilter.toLowerCase()) {
+        const selNorm = selectedCategoryFilter.normalize('NFC').toLowerCase();
+        const vTypeNorm = item.vehicleType.normalize('NFC').toLowerCase();
+        const vNameNorm = (item.vehicleName || '').normalize('NFC').toLowerCase();
+        if (vTypeNorm !== selNorm && !vNameNorm.includes(selNorm)) {
           return false;
         }
       }
 
       // 6. Manager Filter
       if (selectedManagerFilter !== 'ALL') {
-        if (item.driverName.toLowerCase() !== selectedManagerFilter.toLowerCase()) {
+        if (selectedManagerFilter === 'UNASSIGNED' || selectedManagerFilter === '__UNASSIGNED__') {
+          const isUn = !item.driverName || item.driverName === '—' || item.driverName.includes('Chưa');
+          if (!isUn) return false;
+        } else if (!selectedManagerName || normalizeMasterDataKey(item.driverName) !== normalizeMasterDataKey(selectedManagerName)) {
           return false;
         }
       }
@@ -877,6 +1131,7 @@ export const UnitAssignmentPage: React.FC = () => {
     selectedLocationFilter,
     selectedCategoryFilter,
     selectedManagerFilter,
+    selectedManagerName,
     selectedStatusFilter,
     selectedGroupFilter,
   ]);
@@ -887,7 +1142,8 @@ export const UnitAssignmentPage: React.FC = () => {
       // 1. KPI Card Filter cho Nông cụ
       if (cardFilter === 'EQUIP_RUNNING' && item.status !== 'ATTACHED') return false;
       if (cardFilter === 'EQUIP_WAITING' && item.status !== 'IN_DEPOT') return false;
-      if (cardFilter === 'EQUIP_REPAIR' && item.status !== 'MAINTENANCE') return false;
+      if (cardFilter === 'EQUIP_MAINTENANCE' && item.status !== 'MAINTENANCE') return false;
+      if (cardFilter === 'EQUIP_REPAIR' && item.status !== 'REPAIR') return false;
       if (cardFilter === 'EQUIP_UNASSIGNED' && item.status !== 'UNASSIGNED') return false;
 
       // 2. Search Term Filter
@@ -906,30 +1162,40 @@ export const UnitAssignmentPage: React.FC = () => {
 
       // 3. Unit Filter
       if (selectedUnitFilter !== 'ALL') {
-        if (selectedUnitFilter === 'UNASSIGNED') {
-          if (item.status === 'ATTACHED') return false;
-        } else if (item.unit.toLowerCase() !== selectedUnitFilter.toLowerCase()) {
+        if (selectedUnitFilter === 'UNASSIGNED' || selectedUnitFilter === '__UNASSIGNED__') {
+          const isUn = !item.unit || item.unit === '—' || item.unit === 'Chưa phân bổ' || item.unit.includes('Chưa');
+          if (!isUn) return false;
+        } else if (normalizeMasterDataKey(item.unit) !== normalizeMasterDataKey(selectedUnitFilter)) {
           return false;
         }
       }
 
       // 4. Location Filter
       if (selectedLocationFilter !== 'ALL') {
-        if (item.gatheringLocation && item.gatheringLocation.toLowerCase() !== selectedLocationFilter.toLowerCase()) {
+        if (selectedLocationFilter === 'UNASSIGNED' || selectedLocationFilter === '__UNASSIGNED__') {
+          const isUn = !item.gatheringLocation || item.gatheringLocation === '—' || item.gatheringLocation.includes('Chưa');
+          if (!isUn) return false;
+        } else if (item.gatheringLocation && normalizeMasterDataKey(item.gatheringLocation) !== normalizeMasterDataKey(selectedLocationFilter)) {
           return false;
         }
       }
 
       // 5. Category Filter
       if (selectedCategoryFilter !== 'ALL') {
-        if (item.name.toLowerCase() !== selectedCategoryFilter.toLowerCase() && item.categoryLabel?.toLowerCase() !== selectedCategoryFilter.toLowerCase()) {
+        const selNorm = selectedCategoryFilter.normalize('NFC').toLowerCase();
+        const lblNorm = (item.categoryLabel || '').normalize('NFC').toLowerCase();
+        const nameNorm = item.name.normalize('NFC').toLowerCase();
+        if (lblNorm !== selNorm && !nameNorm.includes(selNorm)) {
           return false;
         }
       }
 
       // 6. Manager Filter
       if (selectedManagerFilter !== 'ALL') {
-        if (item.managerName && item.managerName.toLowerCase() !== selectedManagerFilter.toLowerCase()) {
+        if (selectedManagerFilter === 'UNASSIGNED' || selectedManagerFilter === '__UNASSIGNED__') {
+          const isUn = !item.managerName || item.managerName === '—' || item.managerName.includes('Chưa');
+          if (!isUn) return false;
+        } else if (!selectedManagerName || !item.managerName || normalizeMasterDataKey(item.managerName) !== normalizeMasterDataKey(selectedManagerName)) {
           return false;
         }
       }
@@ -956,11 +1222,44 @@ export const UnitAssignmentPage: React.FC = () => {
     selectedLocationFilter,
     selectedCategoryFilter,
     selectedManagerFilter,
+    selectedManagerName,
     selectedStatusFilter,
     selectedGroupFilter,
   ]);
 
+  // Filtered other assets (Row 3)
+  const filteredOtherAssets = React.useMemo(() => {
+    return otherAssetsList.filter((item) => {
+      if (cardFilter === 'OTHER_ACTIVE' && item.status !== 'active') return false;
+      if (cardFilter === 'OTHER_MAINTENANCE' && item.status !== 'maintenance') return false;
+      if (cardFilter === 'OTHER_REPAIR' && item.status !== 'repair') return false;
+      if (cardFilter === 'OTHER_UNASSIGNED' && item.status !== 'unassigned') return false;
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        const match =
+          item.vehicleCode.toLowerCase().includes(term) ||
+          item.vehicleType.toLowerCase().includes(term) ||
+          (item.vehicleName && item.vehicleName.toLowerCase().includes(term)) ||
+          item.unitName.toLowerCase().includes(term) ||
+          item.driverName.toLowerCase().includes(term);
+        if (!match) return false;
+      }
+      if (selectedUnitFilter !== 'ALL') {
+        if (selectedUnitFilter === 'UNASSIGNED' || selectedUnitFilter === '__UNASSIGNED__') {
+          const isUn = !item.unitName || item.unitName === '—' || item.unitName === 'Chưa phân bổ' || item.unitName.includes('Chưa') || item.status === 'unassigned';
+          if (!isUn) return false;
+        } else if (normalizeMasterDataKey(item.unitName) !== normalizeMasterDataKey(selectedUnitFilter)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [otherAssetsList, cardFilter, searchTerm, selectedUnitFilter]);
+
   const isImplementMode = cardFilter.startsWith('EQUIP_');
+  const isOtherMode = cardFilter.startsWith('OTHER_');
+
+
 
   const handleExportExcel = () => {
     const headers = [
@@ -1024,9 +1323,16 @@ export const UnitAssignmentPage: React.FC = () => {
       sortable: true,
       width: '190px',
       render: (row) => (
-        <span className="font-semibold text-slate-900 block whitespace-normal leading-tight text-xs" title={row.vehicleType}>
-          {row.vehicleType}
-        </span>
+        <div>
+          <span className="font-bold text-slate-900 block whitespace-normal leading-tight text-xs" title={row.vehicleType}>
+            {row.vehicleType}
+          </span>
+          {row.vehicleName && row.vehicleName !== row.vehicleType && (
+            <span className="text-[10px] text-slate-500 block truncate max-w-[180px]" title={row.vehicleName}>
+              {row.vehicleName}
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -1110,32 +1416,47 @@ export const UnitAssignmentPage: React.FC = () => {
         }
         return row.status === 'newly_assigned' ? (
           <Badge variant="amber">Sẵn sàng</Badge>
+        ) : row.status === 'maintenance' ? (
+          <Badge variant="amber">Đang bảo dưỡng</Badge>
         ) : row.status === 'repair' ? (
-          <Badge variant="red">Đang BTSC</Badge>
+          <Badge variant="red">Đang sửa chữa</Badge>
         ) : (
           <Badge variant="green">Đang sử dụng</Badge>
         );
       },
     },
     {
-      key: 'actions',
-      title: 'THAO TÁC',
+      key: 'user',
+      title: 'User',
+      width: '70px',
       align: 'center',
-      width: '135px',
       render: (row) => (
-        <div className="flex items-center justify-center gap-1 whitespace-nowrap">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedRecord(row);
+        <AuditUserPopover
+          createdDate="14-03-2026"
+          createdUser="admin"
+          updatedDate="01-08-2026"
+          updatedUser="admin"
+          title={`Xem thông tin phân bổ xe ${row.vehicleCode}`}
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      title: 'Tác vụ',
+      width: '120px',
+      align: 'center',
+      render: (row) => (
+        <div className="flex items-center justify-center gap-1">
+          <TableRowActions
+            onView={() => setSelectedRecord(row)}
+            onEdit={() => {
+              const foundIdx = assignmentsList.findIndex((a) => a.id === row.id);
+              if (foundIdx >= 0) setSelectedVehicleIdx(foundIdx);
+              setShowAddModal(true);
             }}
-            className="px-2 py-1 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
-            title="Xem chi tiết phân bổ & lịch sử bàn giao"
-          >
-            <Eye className="w-3.5 h-3.5 text-slate-500" />
-            <span>Chi tiết</span>
-          </button>
+            viewTitle="Xem chi tiết phân bổ & lịch sử"
+            editTitle="Lập quyết định bàn giao"
+          />
           <button
             type="button"
             onClick={(e) => {
@@ -1144,11 +1465,10 @@ export const UnitAssignmentPage: React.FC = () => {
               if (foundIdx >= 0) setSelectedVehicleIdx(foundIdx);
               setShowAddModal(true);
             }}
-            className="px-2 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-all flex items-center gap-1 cursor-pointer"
+            className="p-1 hover:bg-emerald-50 text-emerald-700 rounded transition-colors cursor-pointer"
             title="Lập quyết định bàn giao phương tiện này"
           >
-            <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-700" />
-            <span>Bàn giao</span>
+            <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-600" />
           </button>
         </div>
       ),
@@ -1174,9 +1494,16 @@ export const UnitAssignmentPage: React.FC = () => {
       sortable: true,
       width: '190px',
       render: (row) => (
-        <span className="font-semibold text-slate-900 block whitespace-normal leading-tight text-xs" title={row.name}>
-          {row.name}
-        </span>
+        <div>
+          <span className="font-bold text-slate-900 block whitespace-normal leading-tight text-xs" title={row.categoryLabel || row.name}>
+            {row.categoryLabel || row.name}
+          </span>
+          {row.name && row.name !== row.categoryLabel && (
+            <span className="text-[10px] text-slate-500 block truncate max-w-[180px]" title={row.name}>
+              {row.name}
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -1213,9 +1540,9 @@ export const UnitAssignmentPage: React.FC = () => {
       width: '135px',
       render: (row) => (
         <div>
-          <span className="font-bold text-slate-900 block whitespace-normal leading-tight">{row.managerName || 'Phạm Ngọc Hải'}</span>
-          <span className="text-[10px] font-mono text-slate-500 block" title={`SĐT: ${row.managerPhone || '0825456565'}`}>
-            📞 {row.managerPhone || '0825456565'}
+          <span className="font-bold text-slate-900 block whitespace-normal leading-tight">{row.managerName || 'Chưa bổ nhiệm'}</span>
+          <span className="text-[10px] font-mono text-slate-500 block" title={row.managerPhone ? `SĐT: ${row.managerPhone}` : 'Chưa có số điện thoại'}>
+            {row.managerPhone ? `📞 ${row.managerPhone}` : '—'}
           </span>
         </div>
       ),
@@ -1243,7 +1570,9 @@ export const UnitAssignmentPage: React.FC = () => {
           return <Badge variant="red">Chưa phân bổ</Badge>;
         }
         return row.status === 'MAINTENANCE' ? (
-          <Badge variant="red">Đang BTSC</Badge>
+          <Badge variant="amber">Đang bảo dưỡng</Badge>
+        ) : row.status === 'REPAIR' ? (
+          <Badge variant="red">Đang sửa chữa</Badge>
         ) : row.status === 'IN_DEPOT' ? (
           <Badge variant="amber">Sẵn sàng</Badge>
         ) : (
@@ -1252,24 +1581,37 @@ export const UnitAssignmentPage: React.FC = () => {
       },
     },
     {
-      key: 'actions',
-      title: 'THAO TÁC',
+      key: 'user',
+      title: 'User',
+      width: '70px',
       align: 'center',
-      width: '135px',
       render: (row) => (
-        <div className="flex items-center justify-center gap-1 whitespace-nowrap">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedImplement(row);
+        <AuditUserPopover
+          createdDate="14-03-2026"
+          createdUser="admin"
+          updatedDate="01-08-2026"
+          updatedUser="admin"
+          title={`Xem thông tin phân bổ nông cụ ${row.code}`}
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      title: 'Tác vụ',
+      width: '120px',
+      align: 'center',
+      render: (row) => (
+        <div className="flex items-center justify-center gap-1">
+          <TableRowActions
+            onView={() => setSelectedImplement(row)}
+            onEdit={() => {
+              const foundIdx = implementsList.findIndex((a) => a.id === row.id);
+              if (foundIdx >= 0) setSelectedImplementIdx(foundIdx);
+              setShowImplementHandoverModal(true);
             }}
-            className="px-2 py-1 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
-            title="Xem chi tiết phân bổ & lịch sử bàn giao"
-          >
-            <Eye className="w-3.5 h-3.5 text-slate-500" />
-            <span>Chi tiết</span>
-          </button>
+            viewTitle="Xem chi tiết phân bổ & lịch sử"
+            editTitle="Lập quyết định bàn giao"
+          />
           <button
             type="button"
             onClick={(e) => {
@@ -1278,11 +1620,10 @@ export const UnitAssignmentPage: React.FC = () => {
               if (foundIdx >= 0) setSelectedImplementIdx(foundIdx);
               setShowImplementHandoverModal(true);
             }}
-            className="px-2 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-all flex items-center gap-1 cursor-pointer"
+            className="p-1 hover:bg-emerald-50 text-emerald-700 rounded transition-colors cursor-pointer"
             title="Lập quyết định bàn giao nông cụ này"
           >
-            <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-700" />
-            <span>Bàn giao</span>
+            <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-600" />
           </button>
         </div>
       ),
@@ -1291,10 +1632,10 @@ export const UnitAssignmentPage: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* 5x2 DASHBOARD TILES — Row 1: 5 bộ lọc trạng thái | Row 2: 4 phân nhóm MMTB */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* 6x2 DASHBOARD TILES — Tách biệt rõ ràng Bảo dưỡng và Sửa chữa */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
 
-        {/* ═══ ROW 1 — Bộ lọc trạng thái vận hành ═══ */}
+        {/* ═══ ROW 1 — Bộ lọc trạng thái vận hành Phương tiện (6 thẻ) ═══ */}
 
         {/* Card 1: Tất cả phương tiện */}
         <button
@@ -1371,7 +1712,32 @@ export const UnitAssignmentPage: React.FC = () => {
           </div>
         </button>
 
-        {/* Card 4: Bảo dưỡng / Sửa chữa */}
+        {/* Card 4: Đang bảo dưỡng (7 xe) */}
+        <button
+          type="button"
+          onClick={() => setCardFilter((curr) => (curr === 'MAINTENANCE' ? 'ALL' : 'MAINTENANCE'))}
+          className={`relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer ${
+            cardFilter === 'MAINTENANCE'
+              ? 'border-amber-500 bg-amber-50/40 ring-2 ring-amber-500/25 shadow-sm scale-[1.01]'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }`}
+        >
+          <span className="absolute inset-x-0 bottom-0 h-1.5 bg-amber-500" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-700">Đang bảo dưỡng</span>
+            <div className="rounded-xl p-2 bg-amber-50 text-amber-600">
+              <Wrench className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-amber-700">
+            {stats.maintenance.toLocaleString('vi-VN')} xe
+          </div>
+          <div className="mt-1 text-[11px] font-semibold text-amber-600 truncate">
+            Bảo dưỡng định kỳ BDC
+          </div>
+        </button>
+
+        {/* Card 5: Đang sửa chữa (426 xe) */}
         <button
           type="button"
           onClick={() => setCardFilter((curr) => (curr === 'REPAIR' ? 'ALL' : 'REPAIR'))}
@@ -1383,7 +1749,7 @@ export const UnitAssignmentPage: React.FC = () => {
         >
           <span className="absolute inset-x-0 bottom-0 h-1.5 bg-rose-500" />
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-700">Bảo dưỡng / Sửa chữa</span>
+            <span className="text-xs font-bold text-rose-700">Đang sửa chữa (Hỏng)</span>
             <div className="rounded-xl p-2 bg-rose-50 text-rose-600">
               <Wrench className="w-5 h-5" />
             </div>
@@ -1396,7 +1762,7 @@ export const UnitAssignmentPage: React.FC = () => {
           </div>
         </button>
 
-        {/* Card 5: Chưa phân bổ Đơn vị */}
+        {/* Card 6: Chưa phân bổ Đơn vị */}
         <button
           type="button"
           onClick={() => setCardFilter((curr) => (curr === 'UNASSIGNED_UNIT' ? 'ALL' : 'UNASSIGNED_UNIT'))}
@@ -1421,9 +1787,9 @@ export const UnitAssignmentPage: React.FC = () => {
           </div>
         </button>
 
-        {/* ═══ ROW 2 — Thiết bị phụ trợ / Nông cụ đính kèm (Thiết kế giống hệt Row 1) ═══ */}
+        {/* ═══ ROW 2 — Thiết bị phụ trợ / Nông cụ đính kèm (6 thẻ đồng bộ 100%) ═══ */}
 
-        {/* Card 6: Tất cả thiết bị & nông cụ (Blue) */}
+        {/* Card 7: Tất cả thiết bị & nông cụ */}
         <button
           type="button"
           onClick={() => setCardFilter((curr) => (curr === 'EQUIP_ALL' ? 'ALL' : 'EQUIP_ALL'))}
@@ -1448,7 +1814,7 @@ export const UnitAssignmentPage: React.FC = () => {
           </div>
         </button>
 
-        {/* Card 7: Đang bố trí vận hành (Emerald) */}
+        {/* Card 8: Đang bố trí vận hành */}
         <button
           type="button"
           onClick={() => setCardFilter((curr) => (curr === 'EQUIP_RUNNING' ? 'ALL' : 'EQUIP_RUNNING'))}
@@ -1473,7 +1839,7 @@ export const UnitAssignmentPage: React.FC = () => {
           </div>
         </button>
 
-        {/* Card 8: Sẵn sàng điều động (Amber) */}
+        {/* Card 9: Sẵn sàng điều động */}
         <button
           type="button"
           onClick={() => setCardFilter((curr) => (curr === 'EQUIP_WAITING' ? 'ALL' : 'EQUIP_WAITING'))}
@@ -1498,7 +1864,32 @@ export const UnitAssignmentPage: React.FC = () => {
           </div>
         </button>
 
-        {/* Card 9: Bảo dưỡng / Sửa chữa (Rose) */}
+        {/* Card 10: Đang bảo dưỡng (19 bộ) */}
+        <button
+          type="button"
+          onClick={() => setCardFilter((curr) => (curr === 'EQUIP_MAINTENANCE' ? 'ALL' : 'EQUIP_MAINTENANCE'))}
+          className={`relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer ${
+            cardFilter === 'EQUIP_MAINTENANCE'
+              ? 'border-amber-500 bg-amber-50/40 ring-2 ring-amber-500/25 shadow-sm scale-[1.01]'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }`}
+        >
+          <span className="absolute inset-x-0 bottom-0 h-1.5 bg-amber-500" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-700">Đang bảo dưỡng</span>
+            <div className="rounded-xl p-2 bg-amber-50 text-amber-600">
+              <Wrench className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-amber-700">
+            {implementStats.maintenance.toLocaleString('vi-VN')} bộ
+          </div>
+          <div className="mt-1 text-[11px] font-semibold text-amber-600 truncate">
+            Hao mòn chảo bừa, dao phay
+          </div>
+        </button>
+
+        {/* Card 11: Đang sửa chữa (20 bộ) */}
         <button
           type="button"
           onClick={() => setCardFilter((curr) => (curr === 'EQUIP_REPAIR' ? 'ALL' : 'EQUIP_REPAIR'))}
@@ -1510,20 +1901,20 @@ export const UnitAssignmentPage: React.FC = () => {
         >
           <span className="absolute inset-x-0 bottom-0 h-1.5 bg-rose-500" />
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-700">Bảo dưỡng / Sửa chữa</span>
+            <span className="text-xs font-bold text-rose-700">Đang sửa chữa (Hỏng)</span>
             <div className="rounded-xl p-2 bg-rose-50 text-rose-600">
               <Wrench className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-2 text-2xl font-black text-rose-700">
-            {implementStats.maintenance.toLocaleString('vi-VN')} bộ
+            {implementStats.repair.toLocaleString('vi-VN')} bộ
           </div>
           <div className="mt-1 text-[11px] font-semibold text-rose-600 truncate">
             Tại xưởng BTSC & trạm cơ điện
           </div>
         </button>
 
-        {/* Card 10: Chưa phân bổ Đơn vị (Orange) */}
+        {/* Card 12: Chưa phân bổ Đơn vị */}
         <button
           type="button"
           onClick={() => setCardFilter((curr) => (curr === 'EQUIP_UNASSIGNED' ? 'ALL' : 'EQUIP_UNASSIGNED'))}
@@ -1545,6 +1936,158 @@ export const UnitAssignmentPage: React.FC = () => {
           </div>
           <div className="mt-1 text-[11px] font-semibold text-orange-600 truncate">
             Chờ cấp phát Đơn vị sử dụng
+          </div>
+        </button>
+
+        {/* ═══ ROW 3 — Tài sản khác (hoạt động độc lập) ═══ */}
+
+        {/* Card 13: Tất cả tài sản khác */}
+        <button
+          type="button"
+          onClick={() => setCardFilter((curr) => (curr === 'OTHER_ALL' ? 'ALL' : 'OTHER_ALL'))}
+          className={`relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer ${
+            cardFilter === 'OTHER_ALL'
+              ? 'border-violet-500 bg-violet-50/40 ring-2 ring-violet-500/25 shadow-sm scale-[1.01]'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }`}
+        >
+          <span className="absolute inset-x-0 bottom-0 h-1.5 bg-violet-500" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">Tài sản khác (máy, thiết bị)</span>
+            <div className="rounded-xl p-2 bg-violet-50 text-violet-600">
+              <Package className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-slate-900">
+            {otherAssetStats.total.toLocaleString('vi-VN')} ts
+          </div>
+          <div className="mt-1 text-[11px] font-semibold text-slate-500 truncate">
+            {otherAssetStats.unassigned.toLocaleString('vi-VN')} chưa gán • độc lập
+          </div>
+        </button>
+
+        {/* Card 14: Đang hoạt động */}
+        <button
+          type="button"
+          onClick={() => setCardFilter((curr) => (curr === 'OTHER_ACTIVE' ? 'ALL' : 'OTHER_ACTIVE'))}
+          className={`relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer ${
+            cardFilter === 'OTHER_ACTIVE'
+              ? 'border-emerald-500 bg-emerald-50/40 ring-2 ring-emerald-500/25 shadow-sm scale-[1.01]'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }`}
+        >
+          <span className="absolute inset-x-0 bottom-0 h-1.5 bg-emerald-500" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-700">Đang hoạt động</span>
+            <div className="rounded-xl p-2 bg-emerald-50 text-emerald-600">
+              <PackageCheck className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-emerald-700">
+            {otherAssetStats.active.toLocaleString('vi-VN')} ts
+          </div>
+          <div className="mt-1 text-[11px] font-semibold text-emerald-600 truncate">
+            Vận hành thường xuyên
+          </div>
+        </button>
+
+        {/* Card 15: Chờ phân công */}
+        <button
+          type="button"
+          onClick={() => setCardFilter((curr) => (curr === 'OTHER_WAITING' ? 'ALL' : 'OTHER_WAITING'))}
+          className={`relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer ${
+            cardFilter === 'OTHER_WAITING'
+              ? 'border-amber-500 bg-amber-50/40 ring-2 ring-amber-500/25 shadow-sm scale-[1.01]'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }`}
+        >
+          <span className="absolute inset-x-0 bottom-0 h-1.5 bg-amber-500" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-700">Chờ phân công</span>
+            <div className="rounded-xl p-2 bg-amber-50 text-amber-600">
+              <Gauge className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-amber-700">
+            {otherAssetStats.waiting.toLocaleString('vi-VN')} ts
+          </div>
+          <div className="mt-1 text-[11px] font-semibold text-amber-600 truncate">
+            Sẵn sàng bàn giao
+          </div>
+        </button>
+
+        {/* Card 16: Đang bảo dưỡng */}
+        <button
+          type="button"
+          onClick={() => setCardFilter((curr) => (curr === 'OTHER_MAINTENANCE' ? 'ALL' : 'OTHER_MAINTENANCE'))}
+          className={`relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer ${
+            cardFilter === 'OTHER_MAINTENANCE'
+              ? 'border-amber-500 bg-amber-50/40 ring-2 ring-amber-500/25 shadow-sm scale-[1.01]'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }`}
+        >
+          <span className="absolute inset-x-0 bottom-0 h-1.5 bg-amber-500" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-700">Đang bảo dưỡng</span>
+            <div className="rounded-xl p-2 bg-amber-50 text-amber-600">
+              <Wrench className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-amber-700">
+            {otherAssetStats.maintenance.toLocaleString('vi-VN')} ts
+          </div>
+          <div className="mt-1 text-[11px] font-semibold text-amber-600 truncate">
+            Bảo dưỡng định kỳ
+          </div>
+        </button>
+
+        {/* Card 17: Hư hỏng / Sửa chữạ */}
+        <button
+          type="button"
+          onClick={() => setCardFilter((curr) => (curr === 'OTHER_REPAIR' ? 'ALL' : 'OTHER_REPAIR'))}
+          className={`relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer ${
+            cardFilter === 'OTHER_REPAIR'
+              ? 'border-rose-500 bg-rose-50/40 ring-2 ring-rose-500/25 shadow-sm scale-[1.01]'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }`}
+        >
+          <span className="absolute inset-x-0 bottom-0 h-1.5 bg-rose-500" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-700">Hư hỏng / SC</span>
+            <div className="rounded-xl p-2 bg-rose-50 text-rose-600">
+              <Wrench className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-rose-700">
+            {otherAssetStats.repair.toLocaleString('vi-VN')} ts
+          </div>
+          <div className="mt-1 text-[11px] font-semibold text-rose-600 truncate">
+            Tại xưởng BTSC
+          </div>
+        </button>
+
+        {/* Card 18: Chưa phân bổ Đơn vị */}
+        <button
+          type="button"
+          onClick={() => setCardFilter((curr) => (curr === 'OTHER_UNASSIGNED' ? 'ALL' : 'OTHER_UNASSIGNED'))}
+          className={`relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer ${
+            cardFilter === 'OTHER_UNASSIGNED'
+              ? 'border-orange-500 bg-orange-50/40 ring-2 ring-orange-500/25 shadow-sm scale-[1.01]'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }`}
+        >
+          <span className="absolute inset-x-0 bottom-0 h-1.5 bg-orange-500" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-orange-700">Chưa phân bổ ĐV</span>
+            <div className="rounded-xl p-2 bg-orange-50 text-orange-600">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-orange-700">
+            {otherAssetStats.unassigned.toLocaleString('vi-VN')} ts
+          </div>
+          <div className="mt-1 text-[11px] font-semibold text-orange-600 truncate">
+            Chờ cấp phát Đơn vị
           </div>
         </button>
 
@@ -1689,16 +2232,16 @@ export const UnitAssignmentPage: React.FC = () => {
           <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <div className="flex flex-col">
               <div className="h-5 mb-1 flex items-center">
-                <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate" title={`Đơn vị tiếp nhận / Sử dụng (${unitFilterOptions.length})`}>
-                  Đơn vị tiếp nhận ({unitFilterOptions.length})
+                <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate" title={`Đơn vị tiếp nhận / Sử dụng (${managementTeams.length})`}>
+                  Đơn vị tiếp nhận ({managementTeams.length})
                 </label>
               </div>
               <SearchableSelect
                 value={selectedUnitFilter}
                 onChange={setSelectedUnitFilter}
                 options={unitFilterOptions}
-                placeholder="Tất cả đơn vị"
-                emptyOptionLabel="Tất cả đơn vị"
+                placeholder={`Tất cả đơn vị (${managementTeams.length})`}
+                emptyOptionLabel={`Tất cả đơn vị (${managementTeams.length})`}
                 heightClass="h-9"
                 icon={<Building2 className="h-4 w-4" />}
               />
@@ -1740,16 +2283,16 @@ export const UnitAssignmentPage: React.FC = () => {
 
             <div className="flex flex-col">
               <div className="h-5 mb-1 flex items-center">
-                <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate" title={`NS Quản lý cơ giới (${managerFilterOptions.length})`}>
-                  NS Quản lý ({managerFilterOptions.length})
+                <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate" title={`NS Quản lý cơ giới (${buildManagementFilterManagers(managementTeams).length})`}>
+                  NS Quản lý ({buildManagementFilterManagers(managementTeams).length})
                 </label>
               </div>
               <SearchableSelect
                 value={selectedManagerFilter}
                 onChange={setSelectedManagerFilter}
                 options={managerFilterOptions}
-                placeholder="Tất cả quản lý"
-                emptyOptionLabel="Tất cả quản lý"
+                placeholder={`Tất cả quản lý (${buildManagementFilterManagers(managementTeams).length})`}
+                emptyOptionLabel={`Tất cả quản lý (${buildManagementFilterManagers(managementTeams).length})`}
                 heightClass="h-9"
                 icon={<Users className="h-4 w-4" />}
               />
@@ -1806,6 +2349,19 @@ export const UnitAssignmentPage: React.FC = () => {
           useGlobalFilters={false}
           onRowClick={(row) => setSelectedImplement(row)}
         />
+      ) : isOtherMode ? (
+        <DataTable
+          title="Danh Sách Phân Bổ Tài Sản Khác Theo Đơn Vị"
+          subtitle={`Hiển thị ${filteredOtherAssets.length.toLocaleString('vi-VN')} tài sản (máy phát điện, xe nâng, xe máy...) theo đơn vị quản lý`}
+          columns={columns}
+          data={filteredOtherAssets}
+          isLoading={loading}
+          showSearch={false}
+          showExport={false}
+          pageSize={20}
+          useGlobalFilters={false}
+          onRowClick={(row) => setSelectedRecord(row)}
+        />
       ) : (
         <DataTable
           title="Danh Sách Phân Bổ Xe & MMTB Theo Đơn Vị Nông Trường"
@@ -1820,6 +2376,7 @@ export const UnitAssignmentPage: React.FC = () => {
           onRowClick={(row) => setSelectedRecord(row)}
         />
       )}
+
 
       {/* Implement Detail Modal */}
       {selectedImplement && (
@@ -2009,15 +2566,15 @@ export const UnitAssignmentPage: React.FC = () => {
               <div className="grid grid-cols-3 gap-2 pt-1">
                 <div>
                   <span className="text-slate-500 block text-[11px]">Đơn vị quản lý cũ:</span>
-                  <b className="text-slate-900">BAN_CO_GIOI</b>
+                  <b className="text-slate-900">{implementsList[selectedImplementIdx].unit || 'Chưa phân bổ'}</b>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[11px]">Nơi tập kết cũ:</span>
-                  <b className="text-slate-900">{implementsList[selectedImplementIdx].gatheringLocation || 'Lô 85 DP4'}</b>
+                  <b className="text-slate-900">{implementsList[selectedImplementIdx].gatheringLocation || 'Chưa thiết lập'}</b>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[11px]">Quản lý / Phụ trách cũ:</span>
-                  <b className="text-slate-900">{implementsList[selectedImplementIdx].managerName || 'Phạm Ngọc Hải'}</b>
+                  <b className="text-slate-900">{implementsList[selectedImplementIdx].managerName || 'Chưa bổ nhiệm'}</b>
                 </div>
               </div>
             </div>

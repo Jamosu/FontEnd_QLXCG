@@ -13,11 +13,14 @@ const PATH_NAMES: Record<string, string> = {
   'doi-xe': 'Quản lý đội xe',
   'ho-so-xe': 'Xe cơ giới',
   'thiet-bi': 'Thiết bị & nông cụ',
+  'tai-san-khac': 'Máy phụ trợ & Khác',
+  'may-thiet-bi': 'Máy & tài sản độc lập',
   'phan-xe': 'Phân bổ xe đơn vị',
   'gps-cam-bien': 'Thiết bị GPS & Cảm biến',
   'lich-su': 'Lịch sử biến động xe',
   'lenh-dieu-xe': 'Lệnh điều xe & Vận hành',
   'ke-hoach': 'Kế hoạch',
+  'tai-san-hu-hong': 'Xe & thiết bị hư hỏng',
   'nong-nghiep': 'Nông nghiệp',
   'cong-trinh': 'Công trình',
   'van-chuyen-noi-bo': 'Vận chuyển',
@@ -25,9 +28,10 @@ const PATH_NAMES: Record<string, string> = {
   'chinh-sua': 'Chỉnh sửa kế hoạch',
   'lenh-nong-nghiep': 'Lệnh điều xe nông nghiệp',
   'lenh-cong-trinh': 'Lệnh điều xe công trình',
-  'lenh-noi-bo': 'Lệnh điều xe nội bộ',
+  'lenh-noi-bo': 'Lệnh điều xe Vận chuyển',
   'danh-sach': 'Lệnh điều xe',
-  'van-chuyen': 'Lệnh vận chuyển nội bộ',
+  'chi-tiet': 'Chi tiết & Phân công',
+  'van-chuyen': 'Vận chuyển',
   'phieu-can': 'Xác nhận khối lượng & Cân',
   'lai-xe': 'Quản lý lái xe & KPI',
   'ho-so': 'Hồ sơ lái xe & Thợ máy',
@@ -36,18 +40,17 @@ const PATH_NAMES: Record<string, string> = {
   'vi-pham': 'Lịch sử vi phạm',
   kpi: 'Bảng xếp hạng KPI thi đua',
   'xuong-btsc': 'Xưởng BTSC',
-  'yeu-cau': 'Tiếp nhận báo hỏng',
-  'phieu-sua-chua': 'Phiếu sửa chữa & Vật tư',
+  'yeu-cau': 'Công việc xưởng',
+  'phieu-sua-chua': 'Công việc xưởng · Sửa chữa',
   'tien-do': 'Tiến độ sửa chữa (Kanban)',
   'dang-kiem': 'Đăng kiểm & Bảo hiểm',
   'nhien-lieu': 'Quản lý nhiên liệu',
-  'phieu-cap': 'Phiếu cấp nhiên liệu',
   'dinh-muc': 'Định mức tiêu hao khoán',
   'doi-chieu': 'Đối chiếu GPS vs Định mức',
   'ton-kho': 'Tồn kho bồn chứa xăng dầu',
   'canh-bao-sut-dau': 'Cảnh báo sụt dầu bất thường',
   'canh-bao': 'Cảnh báo & Thông báo',
-  'chua-xu-ly': 'Cảnh báo chưa xử lý (SOS)',
+  'chua-xu-ly': 'Trung tâm cảnh báo',
   'cau-hinh': 'Cấu hình ngưỡng an toàn',
   'thong-ke': 'Thống kê tần suất vi phạm',
   'bao-cao': 'Báo cáo hợp nhất',
@@ -59,7 +62,10 @@ const PATH_NAMES: Record<string, string> = {
   'danh-muc': 'Danh mục hệ thống',
   'don-vi': 'Đơn vị / KLH / Đội xe',
   'chuc-danh': 'Chức danh',
+  'danh-muc-ho-so': 'Danh mục hồ sơ tài xế',
   'loai-xe': 'Chủng loại xe',
+  'quan-ly-co-gioi': 'Quản lý cơ giới & Khu vực',
+  'quan-ly-khu-vuc': 'Quản lý xe & Khu vực phụ trách',
   'loai-cong-viec': 'Loại công việc & Lệnh',
   'lo-thua-tuyen-duong': 'Lô thửa & Tuyến đường',
   'vat-tu-phu-tung': 'Vật tư & Phụ tùng BTSC',
@@ -83,6 +89,7 @@ export const Breadcrumb: React.FC = () => {
 
       {pathSegments.map((segment, index) => {
         const path = `/${pathSegments.slice(0, index + 1).join('/')}`;
+        const targetPath = path === '/lenh-dieu-xe/chi-tiet' ? '/lenh-dieu-xe/danh-sach' : path;
         const isLast = index === pathSegments.length - 1;
         const name = PATH_NAMES[segment] || segment;
 
@@ -92,7 +99,7 @@ export const Breadcrumb: React.FC = () => {
             {isLast ? (
               <span className="font-semibold text-slate-800">{name}</span>
             ) : (
-              <NavLink to={path} className="hover:text-primary transition-colors">
+              <NavLink to={targetPath} className="hover:text-primary transition-colors">
                 {name}
               </NavLink>
             )}

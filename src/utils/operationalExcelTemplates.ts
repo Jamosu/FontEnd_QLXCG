@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+﻿import * as XLSX from 'xlsx';
 
 export type OperationalTemplateType = 'VEHICLE' | 'IMPLEMENT' | 'ASSIGNMENT' | 'DRIVER';
 
@@ -30,16 +30,18 @@ const commonCatalogRows = [
   ['Nhóm nông cụ', 'DAN_RAI_PHAN', 'Dàn rải phân & vôi'],
   ['Nhóm nông cụ', 'RO_MOOC', 'Rơ-moóc chuyên dụng'],
   ['Nhóm nông cụ', 'DAN_PHUN_THUOC', 'Dàn phun thuốc BVTV'],
-  ['Hạng GPLX', 'BANG_MAY_NONG_NGHIEP', 'Bằng điều khiển máy nông nghiệp'],
-  ['Hạng GPLX', 'HANG_C', 'Bằng C'],
-  ['Hạng GPLX', 'HANG_FC', 'Bằng FC'],
-  ['Hạng GPLX', 'HANG_B2', 'Bằng B2'],
-  ['Hạng GPLX', 'HANG_D', 'Bằng D'],
-  ['Đơn vị hệ thống', 'NT1', 'Nông trường 1'],
-  ['Đơn vị hệ thống', 'NT2', 'Nông trường 2'],
-  ['Đơn vị hệ thống', 'XN_BO', 'Xí nghiệp bò'],
-  ['Đơn vị hệ thống', 'TT_BTSC', 'Trung tâm BTSC'],
-  ['Đơn vị hệ thống', 'BAN_CO_GIOI', 'Ban Cơ giới'],
+  ['Hạng GPLX', 'HANG_A', 'Hạng A (Mô tô >125CC)'],
+  ['Hạng GPLX', 'HANG_B1', 'Hạng B1 (Xe con ≤3.5T, số tự động)'],
+  ['Hạng GPLX', 'HANG_B2', 'Hạng B2 (Máy cày, ô tô con <9 chỗ, tải ≤3.5T)'],
+  ['Hạng GPLX', 'HANG_C', 'Hạng C (Xe tải >3.5T)'],
+  ['Hạng GPLX', 'HANG_CE', 'Hạng CE (Đầu kéo Container/Rơ-móc)'],
+  ['Hạng GPLX', 'HANG_D1', 'Hạng D1 (Xe chở người ≤20 chỗ)'],
+  ['Hạng GPLX', 'HANG_D2', 'Hạng D2 (Xe chở người >20 chỗ)'],
+  ['Đơn vị hệ thống', 'KOUN_MOM', 'Nông trường 1'],
+  ['Đơn vị hệ thống', 'KOUN_MOM', 'Nông trường 2'],
+  ['Đơn vị hệ thống', 'KOUN_MOM', 'Xí nghiệp bò'],
+  ['Đơn vị hệ thống', 'KOUN_MOM', 'Trung tâm BTSC'],
+  ['Đơn vị hệ thống', 'KOUN_MOM', 'Ban Cơ giới'],
 ];
 
 const definitions: Record<OperationalTemplateType, TemplateDefinition> = {
@@ -74,7 +76,7 @@ const definitions: Record<OperationalTemplateType, TemplateDefinition> = {
     columns: [
       ['Mã nông cụ / Thiết bị (*)', 'code', 'CHT-CNA-001'], ['Tên nông cụ / Thiết bị (*)', 'name', 'Dàn cày 4 chảo Kubota DP4'],
       ['Nhóm nông cụ (*)', 'category', 'DAN_CAY'], ['Khu liên hợp (*)', 'complexCode', 'KOUN_MOM'],
-      ['Đơn vị sử dụng / XN (*)', 'unit', 'BAN_CO_GIOI'], ['Khu vực địa lý', 'regionCode', 'DP'],
+      ['Đơn vị sử dụng / XN (*)', 'unit', 'KOUN_MOM'], ['Khu vực địa lý', 'regionCode', 'DP'],
       ['Bãi / Nơi tập kết (*)', 'gatheringLocation', 'Lô 85 DP4'], ['Họ tên NS Quản lý', 'managerName', 'Phạm Ngọc Hải'],
       ['Số điện thoại / Zalo NS', 'managerPhone', '0825456565'], ['Hãng sản xuất / Hiệu', 'brand', 'KUBOTA'],
       ['Model nông cụ', 'model', 'DP244'], ['Năm sản xuất', 'year', 2023], ['Quốc gia xuất xứ', 'origin', 'THÁI LAN'],
@@ -119,7 +121,7 @@ const definitions: Record<OperationalTemplateType, TemplateDefinition> = {
       ['Tổ / Đội sản xuất', 'team', 'Đội Cơ giới 1'], ['Chức danh / Vị trí (*)', 'position', 'Lái máy kéo nông nghiệp'],
       ['Loại hợp đồng lao động', 'contractType', 'HĐLĐ xác định thời hạn'], ['Ngày vào làm việc (*)', 'joinedDate', '01/01/2023'],
       ['Tình trạng làm việc (*)', 'employmentStatus', 'DANG_LAM_VIEC'], ['Ngày thôi việc (nếu có)', 'resignedDate', ''],
-      ['Lý do thôi việc', 'resignedReason', ''], ['Hạng giấy phép lái xe (*)', 'licenseClass', 'BANG_MAY_NONG_NGHIEP'],
+      ['Lý do thôi việc', 'resignedReason', ''], ['Hạng giấy phép lái xe (*)', 'licenseClass', 'HANG_B2'],
       ['Số giấy phép lái xe', 'licenseNumber', '790123456789'], ['Ngày cấp GPLX', 'licenseIssueDate', '12/04/2020'],
       ['Ngày hết hạn GPLX (*)', 'licenseExpiryDate', '12/04/2028'], ['Hạn khám sức khỏe định kỳ', 'healthCheckExpiryDate', '15/10/2026'],
       ['Mã xe cơ giới phụ trách chính', 'primaryVehicleCode', 'CHT-MDA-001'], ['Trạng thái ca làm việc', 'currentShiftStatus', 'SAN_SANG'],

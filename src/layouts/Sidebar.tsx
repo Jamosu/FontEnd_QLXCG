@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Navigation,
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { unifiedSchedulingEnabled } from '../config/features';
+import { WORKSHOP_ROUTES } from '../config/workshopRoutes';
 
 interface NavSubItem {
   label: string;
@@ -42,7 +43,8 @@ interface NavGroup {
 }
 
 export const Sidebar: React.FC = () => {
-  const { isSidebarCollapsed, toggleSidebar, activeEmergencyCount } = useAppStore();
+  const { isSidebarCollapsed, toggleSidebar, activeEmergencyCount, currentUser } = useAppStore();
+  const navigate = useNavigate();
   const location = useLocation();
 
   const NAV_MODULES: NavGroup[] = [
@@ -62,19 +64,6 @@ export const Sidebar: React.FC = () => {
         { label: 'Vùng giám sát (Geofence)', path: '/gps/geofence' },
         { label: 'Cảnh báo tốc độ & Vùng', path: '/gps/speed-alert' },
         { label: 'Nhật ký mất sóng offline', path: '/gps/offline-logs' },
-      ],
-    },
-    {
-      id: 'fleet',
-      icon: <Truck className="w-4 h-4" />,
-      title: 'Quản lý đội xe',
-      children: [
-        { label: 'Xe cơ giới', path: '/doi-xe/ho-so-xe' },
-        { label: 'Thiết bị & nông cụ', path: '/doi-xe/thiet-bi' },
-        { label: 'Phân bổ xe đơn vị', path: '/doi-xe/phan-xe' },
-        { label: 'Thiết bị GPS & Cảm biến', path: '/doi-xe/gps-cam-bien' },
-        { label: 'Lịch sử biến động xe', path: '/doi-xe/lich-su' },
-        { label: 'Nhật ký cứu hộ SOS', path: '/doi-xe/quan-li-sos' },
       ],
     },
     {
@@ -98,16 +87,39 @@ export const Sidebar: React.FC = () => {
             { label: 'Tất cả lệnh (Tổng hợp)', path: '/lenh-dieu-xe/danh-sach' },
             { label: 'Lệnh điều xe Nông nghiệp', path: '/lenh-dieu-xe/lenh-nong-nghiep' },
             { label: 'Lệnh điều xe Công trình', path: '/lenh-dieu-xe/lenh-cong-trinh' },
-            { label: 'Lệnh điều xe Nội bộ', path: '/lenh-dieu-xe/lenh-noi-bo' },
+            { label: 'Lệnh điều xe Vận chuyển', path: '/lenh-dieu-xe/lenh-noi-bo' },
+          ],
+        },
+        {
+          label: 'Quản lý việc đã hoàn tất',
+          path: '/lenh-dieu-xe/hoan-tat',
+          children: [
+            { label: 'Tất cả việc hoàn tất', path: '/lenh-dieu-xe/hoan-tat' },
+            { label: 'Việc hoàn tất Nông nghiệp', path: '/lenh-dieu-xe/hoan-tat/nong-nghiep' },
+            { label: 'Việc hoàn tất Công trình', path: '/lenh-dieu-xe/hoan-tat/cong-trinh' },
+            { label: 'Việc hoàn tất Vận hành', path: '/lenh-dieu-xe/hoan-tat/van-hanh' },
           ],
         },
         { label: 'Xác nhận khối lượng & Cân', path: '/lenh-dieu-xe/phieu-can' },
         ...(unifiedSchedulingEnabled
           ? [
-              { label: 'Lịch xe & tài xế', path: '/lenh-dieu-xe/lich-tai-nguyen' },
-              { label: 'Hàng chờ nghiệm thu', path: '/lenh-dieu-xe/nghiem-thu' },
-            ]
+            { label: 'Hàng chờ nghiệm thu', path: '/lenh-dieu-xe/nghiem-thu' },
+          ]
           : []),
+      ],
+    },
+    {
+      id: 'fleet',
+      icon: <Truck className="w-4 h-4" />,
+      title: 'Quản lý đội xe',
+      children: [
+        { label: 'Xe cơ giới', path: '/doi-xe/ho-so-xe' },
+        { label: 'Thiết bị phụ trợ xe', path: '/doi-xe/thiet-bi' },
+        { label: 'Máy phụ trợ & Khác', path: '/doi-xe/tai-san-khac' },
+        { label: 'Phân bổ xe đơn vị', path: '/doi-xe/phan-xe' },
+        { label: 'Thiết bị GPS & Cảm biến', path: '/doi-xe/gps-cam-bien' },
+        { label: 'Lịch sử biến động xe', path: '/doi-xe/lich-su' },
+        { label: 'Nhật ký cứu hộ SOS', path: '/doi-xe/quan-li-sos' },
       ],
     },
     {
@@ -126,11 +138,10 @@ export const Sidebar: React.FC = () => {
       icon: <Wrench className="w-4 h-4" />,
       title: 'Xưởng BTSC',
       children: [
-        { label: 'Kế hoạch bảo trì (250h)', path: '/xuong-btsc/ke-hoach' },
-        { label: 'Tiếp nhận báo hỏng', path: '/xuong-btsc/yeu-cau' },
-        { label: 'Phiếu sửa chữa & Vật tư', path: '/xuong-btsc/phieu-sua-chua' },
-        { label: 'Theo dõi tiến độ xưởng (Kanban)', path: '/xuong-btsc/tien-do' },
-        { label: 'Đăng kiểm & Bảo hiểm', path: '/xuong-btsc/dang-kiem' },
+        { label: 'Kế hoạch bảo trì ', path: WORKSHOP_ROUTES.maintenancePlan },
+        { label: 'Xe & thiết bị hư hỏng', path: WORKSHOP_ROUTES.damagedAssets },
+        { label: 'Công việc xưởng (Yêu cầu & Tiến độ)', path: WORKSHOP_ROUTES.requests },
+        { label: 'Đăng kiểm & Bảo hiểm', path: WORKSHOP_ROUTES.inspection },
       ],
     },
     {
@@ -139,7 +150,6 @@ export const Sidebar: React.FC = () => {
       title: 'Quản lý nhiên liệu xe',
       children: [
         { label: 'Mức dầu bình xe (Que đo GPS)', path: '/nhien-lieu/ton-kho' },
-        { label: 'Cấp phát dầu tại xe & Lô', path: '/nhien-lieu/phieu-cap' },
         { label: 'Định mức tiêu hao theo xe', path: '/nhien-lieu/dinh-muc' },
         { label: 'Đối chiếu GPS vs Que đo dầu', path: '/nhien-lieu/doi-chieu' },
       ],
@@ -150,10 +160,10 @@ export const Sidebar: React.FC = () => {
       title: 'Cảnh báo & Thông báo',
       children: [
         { label: 'Cảnh báo sụt dầu & Hút trộm', path: '/nhien-lieu/canh-bao-sut-dau' },
-        { label: 'Cảnh báo chưa xử lý (SOS)', path: '/canh-bao/chua-xu-ly' },
-        { label: 'Lịch sử cảnh báo', path: '/canh-bao/lich-su' },
-        { label: 'Cấu hình ngưỡng an toàn', path: '/canh-bao/cau-hinh' },
-        { label: 'Thống kê tần suất vi phạm', path: '/canh-bao/thong-ke' },
+        { label: 'Trung tâm cảnh báo', path: '/canh-bao/chua-xu-ly' },
+        { label: 'Lịch sử xử lý', path: '/canh-bao/lich-su' },
+        { label: 'Quy tắc cảnh báo', path: '/canh-bao/cau-hinh' },
+        { label: 'Thống kê cảnh báo', path: '/canh-bao/thong-ke' },
       ],
     },
     {
@@ -175,24 +185,16 @@ export const Sidebar: React.FC = () => {
       title: 'Danh mục hệ thống',
       children: [
         { label: 'Danh mục quản lý dự án', path: '/danh-muc/quan-ly-du-an' },
-        { label: 'Chức danh', path: '/danh-muc/chuc-danh' },
-        { label: 'Chủng loại xe', path: '/danh-muc/loai-xe' },
+        { label: 'Danh mục hồ sơ tài xế', path: '/danh-muc/danh-muc-ho-so' },
+        { label: 'Danh mục xe và thiết bị', path: '/danh-muc/loai-xe' },
+        { label: 'Quản lý cơ giới & Khu vực', path: '/danh-muc/quan-ly-co-gioi' },
         {
           label: 'Loại công việc & Lệnh',
           path: '/danh-muc/loai-cong-viec/nong-nghiep',
           children: [
             { label: 'Cơ giới Nông nghiệp', path: '/danh-muc/loai-cong-viec/nong-nghiep' },
-            { label: 'Máy Công trình', path: '/danh-muc/loai-cong-viec/cong-trinh' },
-            { label: 'Vận chuyển nội bộ', path: '/danh-muc/loai-cong-viec/van-chuyen' },
-          ],
-        },
-        {
-          label: 'Lô thửa & Tuyến đường',
-          path: '/danh-muc/lo-thua-tuyen-duong/nong-nghiep',
-          children: [
-            { label: 'Lô thửa Nông nghiệp', path: '/danh-muc/lo-thua-tuyen-duong/nong-nghiep' },
-            { label: 'Khu vực Công trình', path: '/danh-muc/lo-thua-tuyen-duong/cong-trinh' },
-            { label: 'Tuyến đường Vận chuyển', path: '/danh-muc/lo-thua-tuyen-duong/van-chuyen' },
+            { label: 'Máy & Thi công Công trình', path: '/danh-muc/loai-cong-viec/cong-trinh' },
+            { label: 'Vận chuyển & Tuyến đường', path: '/danh-muc/loai-cong-viec/van-chuyen' },
           ],
         },
         { label: 'Vật tư & Phụ tùng BTSC', path: '/danh-muc/vat-tu-phu-tung' },
@@ -212,6 +214,9 @@ export const Sidebar: React.FC = () => {
       ],
     },
   ];
+  const visibleModules = NAV_MODULES.filter((module) =>
+    module.id !== 'permissions' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.username === 'admin'
+  );
 
   // Accordion state - auto collapses when navigating to dashboard
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
@@ -219,7 +224,7 @@ export const Sidebar: React.FC = () => {
       return {};
     }
     const initial: Record<string, boolean> = {};
-    NAV_MODULES.forEach((mod) => {
+    visibleModules.forEach((mod) => {
       const isChildActive = mod.children?.some(
         (c) =>
           location.pathname === c.path ||
@@ -231,10 +236,10 @@ export const Sidebar: React.FC = () => {
     return initial;
   });
 
-  // Sub-accordion state for items with sub-children (Loại công việc & Lệnh, Lô thửa & Tuyến đường...)
+  // Sub-accordion state for items with sub-children.
   const [openSubGroups, setOpenSubGroups] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
-    NAV_MODULES.forEach((mod) => {
+    visibleModules.forEach((mod) => {
       mod.children?.forEach((child) => {
         if (child.children && child.children.length > 0) {
           const isSubActive = child.children.some(
@@ -255,7 +260,7 @@ export const Sidebar: React.FC = () => {
       setOpenGroups({});
       setOpenSubGroups({});
     } else {
-      const activeGroup = NAV_MODULES.find((mod) =>
+      const activeGroup = visibleModules.find((mod) =>
         mod.children?.some(
           (c) =>
             location.pathname === c.path ||
@@ -298,9 +303,8 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-30 flex flex-col bg-[#0A321A] text-slate-200 transition-all duration-250 ease-in-out border-r border-[#134D2A] ${
-        isSidebarCollapsed ? 'w-[74px]' : 'w-[270px]'
-      }`}
+      className={`fixed inset-y-0 left-0 z-30 flex flex-col bg-[#0A321A] text-slate-200 transition-all duration-250 ease-in-out border-r border-[#134D2A] ${isSidebarCollapsed ? 'w-[74px]' : 'w-[270px]'
+        }`}
     >
       {/* Brand Header */}
       <div className="h-16 flex items-center px-3.5 border-b border-white/10 shrink-0 justify-between bg-[#082815]">
@@ -335,7 +339,7 @@ export const Sidebar: React.FC = () => {
 
       {/* Navigation Links Scrollable Area */}
       <nav className="flex-1 overflow-y-auto sidebar-scrollbar px-2 py-3 space-y-1">
-        {NAV_MODULES.map((group) => {
+        {visibleModules.map((group) => {
           // Direct Link (e.g. Dashboard)
           if (!group.children || group.children.length === 0) {
             const isDirectActive = location.pathname === (group.path || '/dashboard');
@@ -347,11 +351,10 @@ export const Sidebar: React.FC = () => {
                   onClick={() => {
                     setOpenGroups({});
                   }}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                    isDirectActive
-                      ? 'bg-[#154E2C] text-[#B8D83D] font-bold shadow-sm'
-                      : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                  }`}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${isDirectActive
+                    ? 'bg-[#154E2C] text-[#B8D83D] font-bold shadow-sm'
+                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
                     <span className={isDirectActive ? 'text-[#B8D83D]' : 'text-slate-400'}>
@@ -381,39 +384,53 @@ export const Sidebar: React.FC = () => {
 
           return (
             <div key={group.id} className="mb-0.5">
-              <button
-                onClick={() => {
-                  if (isSidebarCollapsed) toggleSidebar();
-                  toggleGroup(group.id);
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  hasActiveChild
-                    ? 'bg-[#154E2C] text-[#B8D83D] font-bold shadow-sm'
-                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                }`}
+              <div
+                className={`w-full flex items-center justify-between rounded-xl text-xs font-semibold transition-all ${hasActiveChild
+                  ? 'bg-[#154E2C] text-[#B8D83D] font-bold shadow-sm'
+                  : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                  }`}
               >
-                <div className="flex items-center gap-2.5 truncate">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (group.id === 'alerts') {
+                      navigate('/canh-bao/chua-xu-ly');
+                      setOpenGroups({ alerts: true });
+                      return;
+                    }
+                    if (isSidebarCollapsed) toggleSidebar();
+                    toggleGroup(group.id);
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left"
+                >
                   <span className={`${hasActiveChild ? 'text-[#B8D83D]' : 'text-slate-400'}`}>
                     {group.icon}
                   </span>
                   {!isSidebarCollapsed && <span className="truncate">{group.title}</span>}
-                </div>
+                </button>
 
                 {!isSidebarCollapsed && (
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleGroup(group.id);
+                    }}
+                    aria-label={`Mở menu ${group.title}`}
+                    className="flex items-center gap-1.5 shrink-0 px-3 py-2.5"
+                  >
                     {group.badge !== undefined && (
                       <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${group.badgeColor || 'bg-slate-700 text-white'}`}>
                         {group.badge}
                       </span>
                     )}
                     <ChevronDown
-                      className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                        isGroupOpen ? 'rotate-180 text-white' : ''
+                      className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isGroupOpen ? 'rotate-180 text-white' : ''
                       }`}
                     />
-                  </div>
+                  </button>
                 )}
-              </button>
+              </div>
 
               {/* Sub-items */}
               {!isSidebarCollapsed && isGroupOpen && (
@@ -437,17 +454,15 @@ export const Sidebar: React.FC = () => {
                                 [child.path]: !prev[child.path],
                               }));
                             }}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11.5px] font-semibold transition-all ${
-                              isSubGroupActive
-                                ? 'text-[#B8D83D] font-bold bg-white/10 border border-white/25 shadow-xs'
-                                : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
-                            }`}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11.5px] font-semibold transition-all ${isSubGroupActive
+                              ? 'text-[#B8D83D] font-bold bg-white/10 border border-white/25 shadow-xs'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
+                              }`}
                           >
                             <span className="truncate">{child.label}</span>
                             <ChevronDown
-                              className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                                isSubGroupOpen ? 'rotate-180 text-[#B8D83D]' : ''
-                              }`}
+                              className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isSubGroupOpen ? 'rotate-180 text-[#B8D83D]' : ''
+                                }`}
                             />
                           </NavLink>
 
@@ -455,16 +470,17 @@ export const Sidebar: React.FC = () => {
                           {isSubGroupOpen && (
                             <div className="pl-3.5 ml-2 border-l border-white/15 space-y-0.5 py-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
                               {child.children.map((sub) => {
-                                const isSubActive = location.pathname === sub.path;
+                                const isSubActive =
+                                  location.pathname === sub.path ||
+                                  `${location.pathname}${location.search}` === sub.path;
                                 return (
                                   <NavLink
                                     key={sub.path}
                                     to={sub.path}
-                                    className={`block px-2.5 py-1 rounded-md text-[11px] transition-all relative ${
-                                      isSubActive
-                                        ? 'text-white font-bold bg-white/15 before:content-[""] before:absolute before:left-[-15px] before:top-1/2 before:-translate-y-1/2 before:w-1.5 before:h-1.5 before:rounded-full before:bg-[#B8D83D]'
-                                        : 'text-slate-300 hover:text-white hover:bg-white/5 font-normal'
-                                    }`}
+                                    className={`block px-2.5 py-1 rounded-md text-[11px] transition-all relative ${isSubActive
+                                      ? 'text-white font-bold bg-white/15 before:content-[""] before:absolute before:left-[-15px] before:top-1/2 before:-translate-y-1/2 before:w-1.5 before:h-1.5 before:rounded-full before:bg-[#B8D83D]'
+                                      : 'text-slate-300 hover:text-white hover:bg-white/5 font-normal'
+                                      }`}
                                   >
                                     {sub.label}
                                   </NavLink>
@@ -476,16 +492,17 @@ export const Sidebar: React.FC = () => {
                       );
                     }
 
-                    const isChildActive = location.pathname === child.path;
+                    const isChildActive =
+                      location.pathname === child.path ||
+                      (child.path === '/doi-xe/tai-san-khac' && location.pathname.startsWith('/doi-xe/tai-san-khac'));
                     return (
                       <NavLink
                         key={child.path}
                         to={child.path}
-                        className={`block px-2.5 py-1.5 rounded-xl text-[11.5px] font-semibold transition-all relative ${
-                          isChildActive
-                            ? 'text-[#B8D83D] font-bold bg-white/10 border border-white/25 shadow-xs before:content-[""] before:absolute before:left-[-8px] before:top-1/2 before:-translate-y-1/2 before:w-1.5 before:h-1.5 before:rounded-full before:bg-[#B8D83D]'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
-                        }`}
+                        className={`block px-2.5 py-1.5 rounded-xl text-[11.5px] font-semibold transition-all relative ${isChildActive
+                          ? 'text-[#B8D83D] font-bold bg-white/10 border border-white/25 shadow-xs before:content-[""] before:absolute before:left-[-8px] before:top-1/2 before:-translate-y-1/2 before:w-1.5 before:h-1.5 before:rounded-full before:bg-[#B8D83D]'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
+                          }`}
                       >
                         {child.label}
                       </NavLink>

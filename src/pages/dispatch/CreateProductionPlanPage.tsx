@@ -29,13 +29,11 @@ import { Button } from '../../components/common/Button';
 import { SearchableSelect, SelectOption } from '../../components/common/SearchableSelect';
 import { StatusBadge } from '../../components/operations/OperationUi';
 import { operationsApi } from '../../api/operations';
-import { apiClient } from '../../api/client';
 import {
   WeeklyPlanItem,
   WeeklyTaskItem,
   STANDARD_JOBS,
   STAGES,
-  INITIAL_WEEKLY_PLANS,
   getMonday,
   getWeekNumber,
   toDateKey,
@@ -44,13 +42,13 @@ import {
   getWeeksOfYear,
   WeekOption,
 } from './ProductionPlanPage';
-import { getStoredPlots } from '../../data/locationCatalogData';
-import { getStoredJobs, getStoredStages } from '../../data/jobCatalogData';
+import { getStoredPlots } from '../../data/dispatchPlanningData';
+import { getStoredJobs, getStoredStages } from '../../data/dispatchPlanningData';
 import {
   mockComplexes,
   mockEnterprises,
   mockFarms,
-} from '../../data/catalogData';
+} from '../../data/dispatchPlanningData';
 
 // Các thứ trong tuần làm việc cơ giới
 export const DAYS_OF_WEEK = [
@@ -153,17 +151,31 @@ export const CreateProductionPlanPage: React.FC = () => {
   const mode = searchParams.get('mode');
   const isViewMode = mode === 'view';
 
-  // Quản lý danh sách kế hoạch từ localStorage
-  const [plans, setPlans] = useState<WeeklyPlanItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('thaco_weekly_agri_plans_v7');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch { }
-    return INITIAL_WEEKLY_PLANS;
-  });
+  const [plans, setPlans] = useState<WeeklyPlanItem[]>([]);
+
+  useEffect(() => {
+    if (!editPlanId) return;
+    operationsApi.getPlan(editPlanId).then((plan) => {
+      setPlans([{
+        id: String(plan.id), code: plan.code, title: plan.title,
+        complexCode: plan.complexCode, complexName: plan.complexName || plan.complexCode,
+        enterpriseCode: plan.enterpriseCode || '', enterpriseName: plan.enterpriseName || '',
+        farmCode: plan.farmCode || '', farmName: plan.farmName || '',
+        stageCode: plan.stage, stageName: STAGES[plan.stage]?.label || plan.stage,
+        defaultPlot: plan.lotPlot, weekNumber: plan.weekNumber || getWeekNumber(plan.startDate),
+        startDate: plan.startDate.slice(0, 10), endDate: plan.endDate.slice(0, 10),
+        status: plan.status as WeeklyPlanItem['status'], notes: plan.notes || '', createdAt: '',
+        tasks: plan.items.map((item) => ({
+          id: String(item.id), jobCode: item.jobCode || '', jobName: item.jobName,
+          stageCode: item.stage, stageName: STAGES[item.stage]?.label || item.stage,
+          lotPlot: item.plotName, implementGroup: '', recommendedVehicle: item.machineType || '',
+          targetAreaHa: item.targetQuantity, assignedVehiclesCount: item.plannedVehicleCount,
+          scheduledDays: item.scheduledDays || 'Thứ 2', notes: item.notes || '',
+          status: (item.taskStatus || 'PENDING') as WeeklyTaskItem['status'],
+        })),
+      }]);
+    }).catch(() => alert('Không thể tải kế hoạch từ máy chủ.'));
+  }, [editPlanId]);
 
   const editingPlan = useMemo(() => {
     if (!editPlanId) return null;
@@ -172,23 +184,23 @@ export const CreateProductionPlanPage: React.FC = () => {
 
   // Năm & Tuần
   const currentYear = new Date().getFullYear();
+  const currentIsoWeek = getWeekNumber(new Date());
   const [selectedYear, setSelectedYear] = useState<number>(() => {
     if (editingPlan) {
       return new Date(editingPlan.startDate).getFullYear();
     }
-    return 2026;
+    return currentYear;
   });
 
   const weeksOfYear = useMemo(() => {
-    return [...getWeeksOfYear(selectedYear)].sort((a, b) => b.weekNumber - a.weekNumber);
+    return [...getWeeksOfYear(selectedYear)].sort((a, b) => a.weekNumber - b.weekNumber);
   }, [selectedYear]);
 
   const [selectedWeekNumber, setSelectedWeekNumber] = useState<number>(() => {
     if (editingPlan) {
       return editingPlan.weekNumber;
     }
-    const currIso = getWeekNumber(new Date());
-    return currIso <= 52 ? currIso : 37;
+    return currentIsoWeek <= 52 ? currentIsoWeek : 1;
   });
 
   // Tìm tuần đã chọn
@@ -310,22 +322,37 @@ export const CreateProductionPlanPage: React.FC = () => {
     return fromMaster;
   }, [complexCode, enterpriseCode, farmCode, currentFarm]);
 
-  const yearOptions: SelectOption[] = useMemo(
-    () => [
-      { value: '2025', label: 'Năm 2025' },
-      { value: '2026', label: 'Năm 2026' },
-      { value: '2027', label: 'Năm 2027' },
-      { value: '2028', label: 'Năm 2028' },
-    ],
-    []
-  );
+  const yearOptions: SelectOption[] = useMemo(() => {
+    const curY = new Date().getFullYear();
+    const years = [curY, curY + 1];
+    const selY = selectedYear || curY;
+    if (selY && !years.includes(selY)) {
+      years.push(selY);
+      years.sort((a, b) => a - b);
+    }
+    return years.map((y) => ({ value: String(y), label: `Năm ${y}` }));
+  }, [selectedYear]);
 
   const weekOptions: SelectOption[] = useMemo(() => {
-    return weeksOfYear.map((w) => ({
+    const curY = new Date().getFullYear();
+    const curW = getWeekNumber(new Date());
+    const selY = selectedYear || curY;
+
+    // Sắp xếp tuần tăng dần: nếu là năm hiện tại, chỉ cho phép chọn từ tuần hiện tại trở đi
+    let filteredWeeks = weeksOfYear;
+    if (selY === curY) {
+      filteredWeeks = weeksOfYear.filter(
+        (w) => w.weekNumber >= curW || (editingPlan && w.weekNumber === selectedWeekNumber)
+      );
+    } else if (selY < curY) {
+      filteredWeeks = editingPlan ? weeksOfYear.filter((w) => w.weekNumber === selectedWeekNumber) : [];
+    }
+
+    return filteredWeeks.map((w) => ({
       value: String(w.weekNumber),
       label: w.label,
     }));
-  }, [weeksOfYear]);
+  }, [weeksOfYear, selectedYear, editingPlan, selectedWeekNumber]);
 
   // Giai đoạn sản xuất của kế hoạch (1 kế hoạch chỉ làm 1 giai đoạn)
   const [selectedStageCode, setSelectedStageCode] = useState<string>(() => {
@@ -431,8 +458,8 @@ export const CreateProductionPlanPage: React.FC = () => {
   const jobOptions: SelectOption[] = useMemo(() => {
     return availableJobsForStage.map((j) => ({
       value: j.code,
-      label: `${j.code}: ${j.name}`,
-      subLabel: j.implementGroup,
+      label: j.name,
+      subLabel: `${j.code} • ${j.implementGroup}`,
     }));
   }, [availableJobsForStage]);
 
@@ -602,6 +629,22 @@ export const CreateProductionPlanPage: React.FC = () => {
 
   // Đổi công việc trên dòng: tự động điền nông cụ & đầu máy theo định mức hoặc lưu tên tùy chỉnh
   const handleChangeTaskJob = (index: number, val: string) => {
+    if (!val || !val.trim() || val === 'ALL') {
+      setFormTasks((prev) => {
+        const copy = [...prev];
+        copy[index] = {
+          ...copy[index],
+          jobCode: '',
+          jobName: '',
+          stageCode: '',
+          stageName: '',
+          implementGroup: '',
+          recommendedVehicle: '',
+        };
+        return copy;
+      });
+      return;
+    }
     const selectedJob = planningJobs.find((j) => j.code === val || j.name === val);
     if (selectedJob) {
       setFormTasks((prev) => {
@@ -624,7 +667,7 @@ export const CreateProductionPlanPage: React.FC = () => {
         const copy = [...prev];
         copy[index] = {
           ...copy[index],
-          jobCode: `CUSTOM-${Date.now()}`,
+          jobCode: val,
           jobName: val,
         };
         return copy;
@@ -670,6 +713,10 @@ export const CreateProductionPlanPage: React.FC = () => {
   // Tự động đồng bộ các công việc của kế hoạch đã duyệt sang Danh sách Lệnh Điều Xe
   // NGUYÊN TẮC: MỖI KẾ HOẠCH CON (TASK) LÀ ĐÚNG 1 LỆNH ĐIỀU XE ĐỘC LẬP
   const syncPlanTasksToDispatch = (plan: WeeklyPlanItem, tasks: WeeklyTaskItem[]) => {
+    void plan;
+    void tasks;
+    return;
+    /* legacy browser-side generator disabled; approval now generates orders atomically on the backend
     try {
       const storageKey = 'thaco_all_dispatch_orders_master_v4';
       const existing = JSON.parse(localStorage.getItem(storageKey) || '[]') as any[];
@@ -803,7 +850,7 @@ export const CreateProductionPlanPage: React.FC = () => {
           try {
             apiClient.post('/dispatch-orders', {
               code: newOrder.code,
-              unit: 'NT1',
+              unit: 'KOUN_MOM',
               purpose: newOrder.purpose,
               origin: newOrder.origin,
               destination: newOrder.destination,
@@ -827,6 +874,7 @@ export const CreateProductionPlanPage: React.FC = () => {
     } catch (err) {
       console.warn('Sync to dispatch master failed:', err);
     }
+    */
   };
 
   // Xóa dòng công việc
@@ -871,10 +919,10 @@ export const CreateProductionPlanPage: React.FC = () => {
     const firstTask = normalizedTasks[0];
     const firstPlot = firstTask?.lotPlot || plotPlot || 'Lô A01';
 
-    let unitEnum = 'NT1';
+    let unitEnum = 'KOUN_MOM';
     if (complexCode === 'SNOUL') unitEnum = 'KLH_SN';
     else if (complexCode === 'NAM_LAO') unitEnum = 'KLH_NL';
-    else if (enterpriseCode?.includes('2') || farmCode?.includes('2')) unitEnum = 'NT2';
+    else if (enterpriseCode?.includes('2') || farmCode?.includes('2')) unitEnum = 'KOUN_MOM';
     else if (enterpriseCode?.includes('3') || farmCode?.includes('3')) unitEnum = 'NT3';
 
     // Chuẩn bị payload đồng bộ MySQL Database khớp với CreatePlanDto
@@ -895,7 +943,8 @@ export const CreateProductionPlanPage: React.FC = () => {
       farmCode,
       farmName,
       defaultPlot: firstPlot,
-      status: status || 'APPROVED',
+      planType: 'AGRICULTURE',
+      status: 'DRAFT',
       notes,
       weekNumber: selectedWeekNumber,
       items: normalizedTasks.map((t) => ({
@@ -922,7 +971,15 @@ export const CreateProductionPlanPage: React.FC = () => {
       if (editingPlan) {
         const numId = Number(editingPlan.id);
         if (!isNaN(numId) && numId > 0) {
-          await operationsApi.updatePlan(numId, dbPayload);
+          const isAdjustment = editingPlan.status === 'APPROVED' || editingPlan.status === 'IN_PROGRESS';
+          if (isAdjustment) {
+            const reason = window.prompt('Nhập lý do điều chỉnh kế hoạch đã duyệt:')?.trim();
+            if (!reason || reason.length < 3) return;
+            await operationsApi.adjustPlan(numId, { ...dbPayload, reason });
+          } else {
+            await operationsApi.updatePlan(numId, dbPayload);
+          }
+          savedDbId = String(numId);
         }
       } else {
         const created = await operationsApi.createPlan(dbPayload);
@@ -930,10 +987,26 @@ export const CreateProductionPlanPage: React.FC = () => {
           savedDbId = String((created as any).id);
         }
       }
+      if (!savedDbId) throw new Error('Máy chủ không trả mã kế hoạch.');
+      let generated = 0;
+      if (status === 'APPROVED') {
+        const isAdjustment = editingPlan?.status === 'APPROVED' || editingPlan?.status === 'IN_PROGRESS';
+        if (!isAdjustment) await operationsApi.submitPlan(savedDbId);
+        const approved = await operationsApi.approvePlan(savedDbId);
+        generated = approved.generation?.createdCount || 0;
+      }
+      alert(status === 'APPROVED'
+        ? `Đã phê duyệt kế hoạch ${planCode} và sinh ${generated} lệnh từ máy chủ.`
+        : `Đã lưu bản nháp kế hoạch ${planCode}.`);
+      navigate('/lenh-dieu-xe/ke-hoach/nong-nghiep');
+      return;
     } catch (apiErr) {
-      console.warn('Backend sync failed, saving locally:', apiErr);
+      console.error('Không thể lưu kế hoạch vào máy chủ:', apiErr);
+      alert('Không thể lưu kế hoạch. Dữ liệu chưa được ghi; vui lòng kiểm tra kết nối và thử lại.');
+      return;
     }
 
+    /* legacy local persistence disabled; the API is the only source of truth
     // Đọc danh sách mới nhất từ localStorage để không bị ghi đè
     let currentStored: WeeklyPlanItem[] = [];
     try {
@@ -1020,6 +1093,7 @@ export const CreateProductionPlanPage: React.FC = () => {
     );
 
     navigate('/lenh-dieu-xe/ke-hoach/nong-nghiep');
+    */
   };
 
   return (
@@ -1153,7 +1227,15 @@ export const CreateProductionPlanPage: React.FC = () => {
                 </label>
                 <SearchableSelect
                   value={String(selectedYear)}
-                  onChange={(val) => setSelectedYear(Number(val))}
+                  onChange={(val) => {
+                    const y = Number(val);
+                    setSelectedYear(y);
+                    const curY = new Date().getFullYear();
+                    const curW = getWeekNumber(new Date());
+                    if (y === curY && selectedWeekNumber < curW) {
+                      setSelectedWeekNumber(curW);
+                    }
+                  }}
                   options={yearOptions}
                   placeholder="Chọn năm"
                   disabled={isViewMode}
@@ -1420,12 +1502,12 @@ export const CreateProductionPlanPage: React.FC = () => {
                       {/* Chọn Công việc (SearchableSelect Combobox / Custom Text) */}
                       <td className="p-3 align-middle">
                         <SearchableSelect
-                          value={task.jobCode}
+                          value={task.jobCode?.startsWith('CUSTOM-') && task.jobName ? task.jobName : task.jobCode}
                           onChange={(val) => handleChangeTaskJob(index, val)}
                           options={jobOptions}
                           placeholder="Chọn hoặc nhập tên công việc..."
                           disabled={isViewMode}
-                          allowCustomInput={false}
+                          allowCustomInput={true}
                           heightClass="h-9"
                           bgClass={isViewMode ? 'bg-slate-100' : 'bg-white'}
                         />
@@ -1437,7 +1519,7 @@ export const CreateProductionPlanPage: React.FC = () => {
                           value={task.lotPlot}
                           onChange={(val) => handleUpdateTaskField(index, 'lotPlot', val)}
                           options={plotOptions}
-                          placeholder={!farmCode ? "Chưa chọn Nông trường..." : "Chọn/nhập Lô/Thửa..."}
+                          placeholder={!farmCode ? "Chưa chọn Nông trường..." : "Chọn Lô / Thửa canh tác..."}
                           disabled={isViewMode || !farmCode}
                           allowCustomInput={false}
                           heightClass="h-9"

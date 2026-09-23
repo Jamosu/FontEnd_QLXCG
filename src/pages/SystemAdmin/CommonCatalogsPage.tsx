@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import {
   RotateCcw,
+  RefreshCw,
   Search,
   Filter,
   FileSpreadsheet,
@@ -32,6 +33,7 @@ import {
   Phone,
   Landmark,
 } from 'lucide-react';
+import { Button } from '../../components/common/Button';
 import {
   mockCompanyEntities,
   mockComplexes,
@@ -56,11 +58,12 @@ import {
   type CatalogTabId,
   type GenericCatalogTabId,
 } from '../../utils/catalogExcel';
+import { AuditUserPopover } from '../../components/common/AuditUserPopover';
 
 export const CommonCatalogsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab') || 'cong-ty';
-  const activeTab = rawTab === 'khu-vuc' ? 'xi-nghiep' : rawTab;
+  const activeTab = rawTab === 'khu-vuc' || rawTab === 'phong-ban' ? 'xi-nghiep' : rawTab;
 
   // Master lists with persistent storage
   const [companies, setCompanies] = useState<CompanyEntity[]>(() =>
@@ -92,30 +95,15 @@ export const CommonCatalogsPage: React.FC = () => {
     setStoredData('catalogs_regions', mockRegions);
     return mockRegions || [];
   });
-  const [departments, setDepartments] = useState<CatalogItem[]>(() => {
-    const stored = getStoredData('catalogs_departments', null);
-    if (!stored || !Array.isArray(stored) || stored.length < mockDepartments.length || !stored.some((d: any) => d.code === 'PB_NHIEN_LIEU')) {
-      setStoredData('catalogs_departments', mockDepartments);
-      return mockDepartments;
-    }
-    return stored;
-  });
-  const [enterprises, setEnterprises] = useState<CatalogItem[]>(() => {
-    const stored = getStoredData('catalogs_enterprises', null);
-    if (!stored || !Array.isArray(stored) || stored.length < mockEnterprises.length || stored.some((e: any) => e.code === 'BE01' && e.areaHa === 1100)) {
-      setStoredData('catalogs_enterprises', mockEnterprises);
-      return mockEnterprises;
-    }
-    return stored;
-  });
-  const [farms, setFarms] = useState<CatalogItem[]>(() => {
-    const stored = getStoredData<CatalogItem[] | null>('catalogs_farms', null);
-    if (stored && Array.isArray(stored) && stored.length > 0) {
-      return stored;
-    }
-    setStoredData('catalogs_farms', mockFarms);
-    return mockFarms || [];
-  });
+  const [departments, setDepartments] = useState<CatalogItem[]>(() =>
+    getStoredData('catalogs_departments', mockDepartments)
+  );
+  const [enterprises, setEnterprises] = useState<CatalogItem[]>(() =>
+    getStoredData('catalogs_enterprises', mockEnterprises)
+  );
+  const [farms, setFarms] = useState<CatalogItem[]>(() =>
+    getStoredData('catalogs_farms', mockFarms)
+  );
   const [teams, setTeams] = useState<CatalogItem[]>(() => {
     const stored = getStoredData<CatalogItem[] | null>('catalogs_teams', null);
     if (!stored || !Array.isArray(stored) || stored.length < mockTeams.length || stored.some((t: any) => t.code === 'DOI_CG_01')) {
@@ -124,20 +112,12 @@ export const CommonCatalogsPage: React.FC = () => {
     }
     return stored;
   });
-  const [plots, setPlots] = useState<CatalogItem[]>(() => {
-    const stored = getStoredData<CatalogItem[] | null>('catalogs_plots', null);
-    if (stored && Array.isArray(stored)) {
-      return stored;
-    }
-    return mockPlots || [];
-  });
-  const [landParcels, setLandParcels] = useState<CatalogItem[]>(() => {
-    const stored = getStoredData<CatalogItem[] | null>('catalogs_land_parcels', null);
-    if (stored && Array.isArray(stored)) {
-      return stored;
-    }
-    return mockLandParcels || [];
-  });
+  const [plots, setPlots] = useState<CatalogItem[]>(() =>
+    getStoredData('catalogs_plots', mockPlots)
+  );
+  const [landParcels, setLandParcels] = useState<CatalogItem[]>(() =>
+    getStoredData('catalogs_land_parcels', mockLandParcels)
+  );
   const [positions, setPositions] = useState<CatalogItem[]>(() =>
     getStoredData('catalogs_positions', mockPositions)
   );
@@ -198,14 +178,14 @@ export const CommonCatalogsPage: React.FC = () => {
           catalogsApi.getCatalogs('PLOT', 'catalogs_plots', mockPlots),
           catalogsApi.getCatalogs('LAND_PARCEL', 'catalogs_land_parcels', mockLandParcels),
         ]);
-        if (compData && compData.length > 0) setCompanies(compData);
-        if (complexesData && complexesData.length > 0) setComplexes(complexesData);
-        if (deptsData && deptsData.length > 0) setDepartments(deptsData);
-        if (entsData && entsData.length > 0) setEnterprises(entsData);
-        if (farmsData && farmsData.length > 0) setFarms(farmsData);
-        if (teamsData && teamsData.length > 0) setTeams(teamsData);
-        if (plotsData && plotsData.length > 0) setPlots(plotsData);
-        if (parcelsData && parcelsData.length > 0) setLandParcels(parcelsData);
+        if (compData) setCompanies(compData);
+        if (complexesData) setComplexes(complexesData);
+        if (deptsData) setDepartments(deptsData);
+        if (entsData) setEnterprises(entsData);
+        if (farmsData) setFarms(farmsData);
+        if (teamsData) setTeams(teamsData);
+        if (plotsData) setPlots(plotsData);
+        if (parcelsData) setLandParcels(parcelsData);
       } catch (err) {
         console.warn('Could not load catalogs from backend, using local storage:', err);
       }
@@ -1765,14 +1745,13 @@ export const CommonCatalogsPage: React.FC = () => {
   });
 
   const tabs = [
-    { id: 'cong-ty', label: 'Công ty', icon: Building2 },
-    { id: 'khu-lien-hop', label: 'Khu liên hợp', icon: MapPin },
-    { id: 'phong-ban', label: 'Phòng ban', icon: Briefcase },
-    { id: 'xi-nghiep', label: 'Xí nghiệp / Khu vực', icon: Layers },
-    { id: 'nong-truong', label: 'Nông trường', icon: Trees },
-    { id: 'danh-muc-lo', label: 'Danh mục lô', icon: Grid },
-    { id: 'danh-muc-thua', label: 'Danh mục thửa', icon: MapPin },
-    { id: 'doi', label: 'Đội', icon: Users2 },
+    { id: 'cong-ty', label: 'Công ty', icon: Landmark, count: companies.length, color: 'text-emerald-700 bg-emerald-50' },
+    { id: 'khu-lien-hop', label: 'Khu liên hợp', icon: MapPin, count: complexes.length, color: 'text-green-700 bg-green-50' },
+    { id: 'xi-nghiep', label: 'Xí nghiệp', icon: Briefcase, count: enterprises.length, color: 'text-teal-700 bg-teal-50' },
+    { id: 'nong-truong', label: 'Nông trường', icon: Trees, count: farms.length, color: 'text-lime-700 bg-lime-50' },
+    { id: 'danh-muc-lo', label: 'Lô sản xuất', icon: Grid, count: plots.length, color: 'text-indigo-700 bg-indigo-50' },
+    { id: 'danh-muc-thua', label: 'Thửa đất', icon: MapPin, count: landParcels.length, color: 'text-violet-700 bg-violet-50' },
+    { id: 'doi', label: 'Đội sản xuất / Tổ', icon: Users2, count: teams.length, color: 'text-blue-700 bg-blue-50' },
   ];
 
   // Open Create Modal
@@ -2462,88 +2441,10 @@ export const CommonCatalogsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 pb-12">
+    <div className="space-y-4 pb-12 font-sans">
 
-      {/* Area Hierarchy Over-Limit Warning Banner */}
-      {totalAreaMismatchesCount > 0 && (
-        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-4 py-3 rounded-lg border-2 border-amber-600 shadow-md flex items-center justify-between flex-wrap gap-3 animate-in slide-in-from-top duration-300">
-          <div className="flex items-center gap-3">
-            <span className="p-2 bg-amber-600/30 rounded-full shrink-0 animate-pulse">
-              <AlertTriangle className="w-5 h-5 text-slate-950" />
-            </span>
-            <div>
-              <div className="font-black text-xs uppercase tracking-wider text-slate-950 flex items-center gap-2 flex-wrap">
-                <span>⚠️ CẢNH BÁO VƯỢT HẠN MỨC: PHÁT HIỆN {totalAreaMismatchesCount} ĐƠN VỊ CÓ TỔNG CON VƯỢT QUÁ DIỆN TÍCH CHA</span>
-                <span className="px-2 py-0.5 bg-red-700 text-white rounded text-[10px] font-bold">VƯỢT HẠN MỨC</span>
-              </div>
-              <div className="text-[11px] text-slate-900 font-medium mt-0.5">
-                {enterpriseAreaMismatches.length > 0 && (
-                  <span>
-                    • <b>{enterpriseAreaMismatches.length} Xí nghiệp</b> có tổng diện tích Nông trường con vượt quá hạn mức Xí nghiệp (VD: <b>{enterpriseAreaMismatches[0].enterprise.code} - {enterpriseAreaMismatches[0].enterprise.name}</b> có {enterpriseAreaMismatches[0].entArea} ha nhưng tổng NT con là {enterpriseAreaMismatches[0].totalFarmArea} ha).{' '}
-                  </span>
-                )}
-                {complexAreaMismatches.length > 0 && (
-                  <span>
-                    • <b>{complexAreaMismatches.length} Khu liên hợp</b> bị các Xí nghiệp con vượt quá diện tích quy mô.
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleAlignAllHierarchyAreas}
-              className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-bold shadow flex items-center gap-1.5 transition-transform hover:scale-105 cursor-pointer"
-              title="Cập nhật diện tích Xí nghiệp và Khu liên hợp bằng tổng các đơn vị con vượt quá"
-            >
-              <Sparkles className="w-4 h-4 text-emerald-300" />
-              <span>Tăng Ha đơn vị cha bằng tổng con</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Sticky 10-Minute Recurring Warning Banner for Over-Limit violations */}
-      {totalOverLimitCount > 0 && (
-        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-4 py-3 rounded-lg border-2 border-amber-600 shadow-md flex items-center justify-between flex-wrap gap-3 animate-in slide-in-from-top duration-300">
-          <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-amber-600/30 rounded-full shrink-0 animate-pulse">
-              <AlertTriangle className="w-5 h-5 text-slate-950" />
-            </span>
-            <div>
-              <div className="font-black text-xs uppercase tracking-wider text-slate-950 flex items-center gap-2 flex-wrap">
-                <span>⚠️ THÔNG BÁO ĐỊNH KỲ (10 PHÚT/LẦN): PHÁT HIỆN {totalOverLimitCount} MỤC VƯỢT HẠN MỨC DIỆN TÍCH</span>
-                <span className="px-2 py-0.5 bg-red-700 text-white rounded text-[10px] font-bold">CHƯA LƯU DATABASE</span>
-              </div>
-              <div className="text-[11px] text-slate-900 font-medium mt-0.5">
-                Các mục vượt hạn mức được đánh dấu màu vàng trên giao diện để theo dõi tạm thời. <span className="font-bold underline">Hệ thống chỉ lưu vào Database khi số liệu được hiệu chỉnh hợp lệ</span> theo đúng quy chuẩn phân cấp.
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {tabOverLimitStats.map((stat) => (
-              <button
-                key={stat.id}
-                onClick={() => {
-                  setSearchParams({ tab: stat.id, status: 'OVER_LIMIT' });
-                  setFilterStatus('OVER_LIMIT');
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow flex items-center gap-1.5 transition-all hover:scale-105 ${activeTab === stat.id
-                  ? 'bg-red-700 text-white ring-2 ring-white'
-                  : 'bg-slate-900 hover:bg-slate-800 text-white'
-                  }`}
-              >
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                <span>Sửa {stat.label} ({stat.count} mục)</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Horizontal Tab Navigation Bar */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-1.5 flex items-center gap-1.5 overflow-x-auto">
+      {/* STATS OVERVIEW CARDS (TABS THEO PHONG CÁCH VEHICLE TYPES PAGE) */}
+      <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -2552,592 +2453,269 @@ export const CommonCatalogsPage: React.FC = () => {
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => {
                 setSearchParams({ tab: tab.id });
               }}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap relative ${isActive
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : errorStat
-                  ? 'bg-amber-100 text-amber-950 border border-amber-300 hover:bg-amber-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
+              className={`rounded-xl border p-3 text-left transition-all hover:shadow-md cursor-pointer ${
+                isActive
+                  ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/20 shadow-xs'
+                  : errorStat
+                  ? 'border-amber-300 bg-amber-50/40 hover:bg-amber-50'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
+              }`}
             >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : errorStat ? 'text-amber-700' : 'text-slate-500'}`} />
-              <span>{tab.label}</span>
-              {errorStat && (
-                <span
-                  title={`${errorStat.count} mục quá hạn mức diện tích`}
-                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-black ${isActive
-                    ? 'bg-amber-300 text-slate-950 ring-1 ring-white'
-                    : 'bg-red-600 text-white'
-                    }`}
-                >
-                  <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-                  {errorStat.count}
-                </span>
-              )}
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500 truncate">{tab.label}</span>
+                <div className={`rounded-lg p-1 shrink-0 ${tab.color}`}>
+                  <Icon className="h-3.5 w-3.5" />
+                </div>
+              </div>
+              <div className="mt-1.5 flex items-baseline justify-between">
+                <span className="text-lg font-black text-slate-900">{tab.count.toLocaleString('vi-VN')}</span>
+                {errorStat && (
+                  <span
+                    className="inline-flex items-center gap-0.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-black text-white"
+                    title={`${errorStat.count} mục quá hạn mức diện tích`}
+                  >
+                    <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                    {errorStat.count}
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}
       </div>
 
-      {/* ========================================================================= */}
-      {/* TIÊU CHÍ TÌM KIẾM (SEARCH CRITERIA PANEL - CASCADING FILTER)              */}
-      {/* ========================================================================= */}
-      <div
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSearch();
-        }}
-        className="bg-white p-3.5 rounded border border-slate-200 shadow-xs space-y-3 font-sans text-xs"
-      >
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-bold text-red-600 uppercase tracking-wide">Tiêu chí tìm kiếm</div>
-          <span className="text-[11px] text-slate-400 italic">Chọn tiêu chí và bấm "Tìm kiếm" (hoặc nhấn Enter)</span>
-        </div>
+      {/* MAIN TABLE CONTAINER */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-4 font-sans">
+        {/* ACTION & CONTEXT FILTER TOOLBAR: BỘ LỌC Ở TRÊN - HÀNG DƯỚI LÀ CÁC BUTTON */}
+        <div className="space-y-3 border-b border-slate-100 pb-3">
+          {/* HÀNG TRÊN: BỘ LỌC (SEARCH & DROPDOWNS NGỮ CẢNH) */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[220px] sm:min-w-[280px]">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-800 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder="Tìm kiếm trong danh mục..."
+              />
+            </div>
 
-        {/* 1. Tiêu chí tìm kiếm - Công ty */}
-        {activeTab === 'cong-ty' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Mã công ty</label>
+            {/* Context Dropdowns (BỘ LỌC SEARCHABLE SELECT) */}
+            {activeTab === 'khu-lien-hop' && (
               <SearchableSelect
-                value={filterForm.code}
-                onChange={handleCodeFilterChange}
-                options={codeFilterOptions}
-                placeholder={`Tất cả mã (${companies.length})`}
-                emptyOptionLabel={`Tất cả mã (${companies.length})`}
+                className="w-48 shrink-0"
                 heightClass="h-9"
-                icon={<Building2 className="w-3.5 h-3.5" />}
+                roundedClass="rounded-xl"
+                bgClass="bg-white"
+                emptyOptionLabel="Tất cả Xí nghiệp"
+                emptyValue=""
+                value={filterForm.enterpriseName || filterForm.parentName || ''}
+                onChange={(val) => {
+                  const resolved = val === 'ALL' ? '' : val;
+                  setFilterForm((prev) => ({ ...prev, enterpriseName: resolved, parentName: resolved }));
+                  setAppliedFilter((prev) => ({ ...prev, enterpriseName: resolved, parentName: resolved }));
+                }}
+                options={enterprises.map((ent) => ({
+                  value: ent.name,
+                  label: ent.name,
+                  subLabel: ent.code,
+                }))}
               />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Địa chỉ</label>
-              <SearchableSelect
-                value={filterForm.address}
-                onChange={(value) => setFilterForm({ ...filterForm, address: value })}
-                options={addressFilterOptions}
-                placeholder="Tất cả địa chỉ"
-                emptyOptionLabel="Tất cả địa chỉ"
-                heightClass="h-9"
-                icon={<MapPin className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Điện thoại</label>
-              <SearchableSelect
-                value={filterForm.phone}
-                onChange={(value) => setFilterForm({ ...filterForm, phone: value })}
-                options={phoneFilterOptions}
-                placeholder="Tất cả điện thoại"
-                emptyOptionLabel="Tất cả điện thoại"
-                heightClass="h-9"
-                icon={<Phone className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Fax</label>
-              <SearchableSelect
-                value={filterForm.fax}
-                onChange={(value) => setFilterForm({ ...filterForm, fax: value })}
-                options={faxFilterOptions}
-                placeholder="Tất cả fax"
-                emptyOptionLabel="Tất cả fax"
-                heightClass="h-9"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái</label>
-              <SearchableSelect
-                value={filterForm.status}
-                onChange={(val) => setFilterForm({ ...filterForm, status: val || 'ALL' })}
-                options={statusOptions}
-                placeholder="Tất cả trạng thái"
-                emptyOptionLabel="Tất cả trạng thái"
-                heightClass="h-9"
-              />
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* 2. Tiêu chí tìm kiếm - Khu liên hợp */}
-        {activeTab === 'khu-lien-hop' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Mã khu liên hợp</label>
+            {activeTab === 'xi-nghiep' && (
               <SearchableSelect
-                value={filterForm.code}
-                onChange={handleCodeFilterChange}
-                options={codeFilterOptions}
-                placeholder={`Tất cả mã (${complexes.length})`}
-                emptyOptionLabel={`Tất cả mã (${complexes.length})`}
+                className="w-52 shrink-0"
                 heightClass="h-9"
-                icon={<Landmark className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Tên khu liên hợp</label>
-              <SearchableSelect
-                value={filterForm.name}
-                onChange={handleNameFilterChange}
-                options={nameFilterOptions}
-                placeholder={`Tất cả khu liên hợp (${complexes.length})`}
-                emptyOptionLabel={`Tất cả khu liên hợp (${complexes.length})`}
-                heightClass="h-9"
-                icon={<Landmark className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Xí nghiệp</label>
-              <SearchableSelect
-                value={filterForm.enterpriseName || filterForm.parentName}
-                onChange={(val) => setFilterForm({ ...filterForm, enterpriseName: val, parentName: val })}
-                options={enterpriseOptions}
-                placeholder={`Tất cả xí nghiệp (${enterprises.length})`}
-                emptyOptionLabel={`Tất cả xí nghiệp (${enterprises.length})`}
-                heightClass="h-9"
-                icon={<Briefcase className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái</label>
-              <SearchableSelect
-                value={filterForm.status}
-                onChange={(val) => setFilterForm({ ...filterForm, status: val || 'ALL' })}
-                options={statusOptions}
-                placeholder="Tất cả trạng thái"
-                emptyOptionLabel="Tất cả trạng thái"
-                heightClass="h-9"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 3. Tiêu chí tìm kiếm - Xí nghiệp (Cấp 1: Khu liên hợp) */}
-        {activeTab === 'xi-nghiep' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Khu liên hợp</label>
-              <SearchableSelect
-                value={filterForm.complexName || filterForm.parentName}
-                onChange={(val) => handleComplexFilterChange(val)}
+                roundedClass="rounded-xl"
+                bgClass="bg-white"
+                emptyOptionLabel="Tất cả Khu liên hợp"
+                emptyValue=""
+                value={filterForm.complexName || filterForm.parentName || ''}
+                onChange={(val) => {
+                  const resolved = val === 'ALL' ? '' : val;
+                  handleComplexFilterChange(resolved);
+                  setAppliedFilter((prev) => ({ ...prev, complexName: resolved, parentName: resolved }));
+                }}
                 options={complexOptions}
-                placeholder={`Tất cả khu liên hợp (${complexes.length})`}
-                emptyOptionLabel={`Tất cả khu liên hợp (${complexes.length})`}
-                heightClass="h-9"
-                icon={<Landmark className="w-3.5 h-3.5" />}
               />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Mã xí nghiệp</label>
-              <SearchableSelect
-                value={filterForm.code}
-                onChange={handleCodeFilterChange}
-                options={codeFilterOptions}
-                placeholder={`Tất cả mã (${enterprises.length})`}
-                emptyOptionLabel={`Tất cả mã (${enterprises.length})`}
-                heightClass="h-9"
-                icon={<Briefcase className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Tên xí nghiệp</label>
-              <SearchableSelect
-                value={filterForm.name}
-                onChange={handleNameFilterChange}
-                options={nameFilterOptions}
-                placeholder={`Tất cả xí nghiệp (${enterprises.length})`}
-                emptyOptionLabel={`Tất cả xí nghiệp (${enterprises.length})`}
-                heightClass="h-9"
-                icon={<Briefcase className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Địa chỉ</label>
-              <SearchableSelect
-                value={filterForm.address}
-                onChange={(value) => setFilterForm({ ...filterForm, address: value })}
-                options={addressFilterOptions}
-                placeholder="Tất cả địa chỉ"
-                emptyOptionLabel="Tất cả địa chỉ"
-                heightClass="h-9"
-                icon={<MapPin className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái</label>
-              <SearchableSelect
-                value={filterForm.status}
-                onChange={(val) => setFilterForm({ ...filterForm, status: val || 'ALL' })}
-                options={statusOptions}
-                placeholder="Tất cả trạng thái"
-                emptyOptionLabel="Tất cả trạng thái"
-                heightClass="h-9"
-              />
-            </div>
+            )}
+
+            {activeTab === 'nong-truong' && (
+              <>
+                <SearchableSelect
+                  className="w-48 shrink-0"
+                  heightClass="h-9"
+                  roundedClass="rounded-xl"
+                  bgClass="bg-white"
+                  emptyOptionLabel="Tất cả Khu liên hợp"
+                  emptyValue=""
+                  value={filterForm.complexName || ''}
+                  onChange={(val) => {
+                    const resolved = val === 'ALL' ? '' : val;
+                    handleComplexFilterChange(resolved);
+                    setAppliedFilter((prev) => ({ ...prev, complexName: resolved }));
+                  }}
+                  options={complexOptions}
+                />
+                <SearchableSelect
+                  className="w-48 shrink-0"
+                  heightClass="h-9"
+                  roundedClass="rounded-xl"
+                  bgClass="bg-white"
+                  emptyOptionLabel="Tất cả Xí nghiệp"
+                  emptyValue=""
+                  value={filterForm.enterpriseName || filterForm.parentName || ''}
+                  onChange={(val) => {
+                    const resolved = val === 'ALL' ? '' : val;
+                    handleEnterpriseFilterChange(resolved);
+                    setAppliedFilter((prev) => ({ ...prev, enterpriseName: resolved, parentName: resolved }));
+                  }}
+                  options={enterpriseOptions}
+                />
+              </>
+            )}
+
+            {activeTab === 'doi' && (
+              <>
+                <SearchableSelect
+                  className="w-48 shrink-0"
+                  heightClass="h-9"
+                  roundedClass="rounded-xl"
+                  bgClass="bg-white"
+                  emptyOptionLabel="Tất cả Khu liên hợp"
+                  emptyValue=""
+                  value={filterForm.complexName || ''}
+                  onChange={(val) => {
+                    const resolved = val === 'ALL' ? '' : val;
+                    handleComplexFilterChange(resolved);
+                    setAppliedFilter((prev) => ({ ...prev, complexName: resolved }));
+                  }}
+                  options={complexOptions}
+                />
+                <SearchableSelect
+                  className="w-48 shrink-0"
+                  heightClass="h-9"
+                  roundedClass="rounded-xl"
+                  bgClass="bg-white"
+                  emptyOptionLabel="Tất cả Nông trường"
+                  emptyValue=""
+                  value={filterForm.farmName || filterForm.parentName || ''}
+                  onChange={(val) => {
+                    const resolved = val === 'ALL' ? '' : val;
+                    handleFarmFilterChange(resolved);
+                    setAppliedFilter((prev) => ({ ...prev, farmName: resolved, parentName: resolved }));
+                  }}
+                  options={farmOptions}
+                />
+              </>
+            )}
+
+            {activeTab === 'danh-muc-lo' && (
+              <>
+                <SearchableSelect
+                  className="w-48 shrink-0"
+                  heightClass="h-9"
+                  roundedClass="rounded-xl"
+                  bgClass="bg-white"
+                  emptyOptionLabel="Tất cả Khu liên hợp"
+                  emptyValue=""
+                  value={filterForm.complexName || ''}
+                  onChange={(val) => {
+                    const resolved = val === 'ALL' ? '' : val;
+                    handleComplexFilterChange(resolved);
+                    setAppliedFilter((prev) => ({ ...prev, complexName: resolved }));
+                  }}
+                  options={complexOptions}
+                />
+                <SearchableSelect
+                  className="w-48 shrink-0"
+                  heightClass="h-9"
+                  roundedClass="rounded-xl"
+                  bgClass="bg-white"
+                  emptyOptionLabel="Tất cả Nông trường"
+                  emptyValue=""
+                  value={filterForm.farmName || filterForm.parentName || ''}
+                  onChange={(val) => {
+                    const resolved = val === 'ALL' ? '' : val;
+                    handleFarmFilterChange(resolved);
+                    setAppliedFilter((prev) => ({ ...prev, farmName: resolved, parentName: resolved }));
+                  }}
+                  options={farmOptions}
+                />
+              </>
+            )}
+
+            {activeTab === 'danh-muc-thua' && (
+              <>
+                <SearchableSelect
+                  className="w-48 shrink-0"
+                  heightClass="h-9"
+                  roundedClass="rounded-xl"
+                  bgClass="bg-white"
+                  emptyOptionLabel="Tất cả Khu liên hợp"
+                  emptyValue=""
+                  value={filterForm.complexName || ''}
+                  onChange={(val) => {
+                    const resolved = val === 'ALL' ? '' : val;
+                    handleComplexFilterChange(resolved);
+                    setAppliedFilter((prev) => ({ ...prev, complexName: resolved }));
+                  }}
+                  options={complexOptions}
+                />
+                <SearchableSelect
+                  className="w-44 shrink-0"
+                  heightClass="h-9"
+                  roundedClass="rounded-xl"
+                  bgClass="bg-white"
+                  emptyOptionLabel="Tất cả Lô"
+                  emptyValue=""
+                  value={filterForm.plotName || ''}
+                  onChange={(val) => {
+                    const resolved = val === 'ALL' ? '' : val;
+                    handlePlotFilterChange(resolved);
+                    setAppliedFilter((prev) => ({ ...prev, plotName: resolved }));
+                  }}
+                  options={plotOptions}
+                />
+              </>
+            )}
+
+            {/* Dropdown Trạng thái chung */}
+            <SearchableSelect
+              className="w-44 shrink-0"
+              heightClass="h-9"
+              roundedClass="rounded-xl"
+              bgClass="bg-white"
+              emptyOptionLabel="Tất cả trạng thái"
+              emptyValue="ALL"
+              value={filterForm.status || 'ALL'}
+              onChange={(val) => {
+                setFilterForm((prev) => ({ ...prev, status: val }));
+                setAppliedFilter((prev) => ({ ...prev, status: val }));
+              }}
+              options={[
+                { value: 'HOAT_DONG', label: 'Còn hoạt động' },
+                { value: 'TAM_DUNG', label: 'Ngưng hoạt động' },
+              ]}
+            />
           </div>
-        )}
 
-        {/* 4. Tiêu chí tìm kiếm - Nông trường (Cấp 1: Khu liên hợp -> Cấp 2: Xí nghiệp) */}
-        {activeTab === 'nong-truong' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Khu liên hợp</label>
-              <SearchableSelect
-                value={filterForm.complexName}
-                onChange={(val) => handleComplexFilterChange(val)}
-                options={complexOptions}
-                placeholder={`Tất cả khu liên hợp (${complexes.length})`}
-                emptyOptionLabel={`Tất cả khu liên hợp (${complexes.length})`}
-                heightClass="h-9"
-                icon={<Landmark className="w-3.5 h-3.5" />}
-              />
+          {/* HÀNG DƯỚI: CÁC BUTTON TÁC VỤ */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-100/80">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">
+                Danh mục: <b className="text-slate-800 font-bold">{tabs.find((t) => t.id === activeTab)?.label}</b>
+              </span>
             </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Xí nghiệp</label>
-              <SearchableSelect
-                value={filterForm.enterpriseName || filterForm.parentName}
-                onChange={(val) => handleEnterpriseFilterChange(val)}
-                options={enterpriseOptions}
-                placeholder={`Tất cả xí nghiệp (${enterprises.length})`}
-                emptyOptionLabel={`Tất cả xí nghiệp (${enterprises.length})`}
-                heightClass="h-9"
-                icon={<Briefcase className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Mã nông trường</label>
-              <SearchableSelect
-                value={filterForm.code}
-                onChange={handleCodeFilterChange}
-                options={codeFilterOptions}
-                placeholder={`Tất cả mã (${farms.length})`}
-                emptyOptionLabel={`Tất cả mã (${farms.length})`}
-                heightClass="h-9"
-                icon={<Trees className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Tên nông trường</label>
-              <SearchableSelect
-                value={filterForm.name}
-                onChange={handleNameFilterChange}
-                options={nameFilterOptions}
-                placeholder={`Tất cả nông trường (${farms.length})`}
-                emptyOptionLabel={`Tất cả nông trường (${farms.length})`}
-                heightClass="h-9"
-                icon={<Trees className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái</label>
-              <SearchableSelect
-                value={filterForm.status}
-                onChange={(val) => setFilterForm({ ...filterForm, status: val || 'ALL' })}
-                options={statusOptions}
-                placeholder="Tất cả trạng thái"
-                emptyOptionLabel="Tất cả trạng thái"
-                heightClass="h-9"
-              />
-            </div>
-          </div>
-        )}
 
-        {/* 5. Tiêu chí tìm kiếm - Phòng ban */}
-        {activeTab === 'phong-ban' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Mã phòng ban</label>
-              <SearchableSelect
-                value={filterForm.code}
-                onChange={handleCodeFilterChange}
-                options={codeFilterOptions}
-                placeholder={`Tất cả mã (${departments.length})`}
-                emptyOptionLabel={`Tất cả mã (${departments.length})`}
-                heightClass="h-9"
-                icon={<Layers className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Tên phòng ban</label>
-              <SearchableSelect
-                value={filterForm.name}
-                onChange={handleNameFilterChange}
-                options={nameFilterOptions}
-                placeholder={`Tất cả phòng ban (${departments.length})`}
-                emptyOptionLabel={`Tất cả phòng ban (${departments.length})`}
-                heightClass="h-9"
-                icon={<Layers className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Đơn vị trực thuộc</label>
-              <SearchableSelect
-                value={filterForm.parentName}
-                onChange={(val) => setFilterForm({ ...filterForm, parentName: val })}
-                options={departmentParentOptions}
-                placeholder="Tất cả đơn vị"
-                emptyOptionLabel="Tất cả đơn vị"
-                heightClass="h-9"
-                icon={<Building2 className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái</label>
-              <SearchableSelect
-                value={filterForm.status}
-                onChange={(val) => setFilterForm({ ...filterForm, status: val || 'ALL' })}
-                options={statusOptions}
-                placeholder="Tất cả trạng thái"
-                emptyOptionLabel="Tất cả trạng thái"
-                heightClass="h-9"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 6. Tiêu chí tìm kiếm - Đội (Đội độc lập, không thuộc nông trường hay xí nghiệp) */}
-        {activeTab === 'doi' && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Mã đội</label>
-              <SearchableSelect
-                value={filterForm.code}
-                onChange={handleCodeFilterChange}
-                options={codeFilterOptions}
-                placeholder={`Tất cả mã (${teams.length})`}
-                emptyOptionLabel={`Tất cả mã (${teams.length})`}
-                heightClass="h-9"
-                icon={<Users2 className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Tên đội</label>
-              <SearchableSelect
-                value={filterForm.name}
-                onChange={handleNameFilterChange}
-                options={nameFilterOptions}
-                placeholder={`Tất cả đội (${teams.length})`}
-                emptyOptionLabel={`Tất cả đội (${teams.length})`}
-                heightClass="h-9"
-                icon={<Users2 className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái</label>
-              <SearchableSelect
-                value={filterForm.status}
-                onChange={(val) => setFilterForm({ ...filterForm, status: val || 'ALL' })}
-                options={statusOptions}
-                placeholder="Tất cả trạng thái"
-                emptyOptionLabel="Tất cả trạng thái"
-                heightClass="h-9"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 7. Tiêu chí tìm kiếm - Danh mục lô (Cấp 1: Khu liên hợp -> Cấp 2: Xí nghiệp -> Cấp 3: Nông trường) */}
-        {activeTab === 'danh-muc-lo' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Khu liên hợp</label>
-              <SearchableSelect
-                value={filterForm.complexName}
-                onChange={(val) => handleComplexFilterChange(val)}
-                options={complexOptions}
-                placeholder={`Tất cả khu liên hợp (${complexes.length})`}
-                emptyOptionLabel={`Tất cả khu liên hợp (${complexes.length})`}
-                heightClass="h-9"
-                icon={<Landmark className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Xí nghiệp</label>
-              <SearchableSelect
-                value={filterForm.enterpriseName}
-                onChange={(val) => handleEnterpriseFilterChange(val)}
-                options={enterpriseOptions}
-                placeholder={`Tất cả xí nghiệp (${enterprises.length})`}
-                emptyOptionLabel={`Tất cả xí nghiệp (${enterprises.length})`}
-                heightClass="h-9"
-                icon={<Briefcase className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Nông trường</label>
-              <SearchableSelect
-                value={filterForm.parentName || filterForm.farmName}
-                onChange={(val) => handleFarmFilterChange(val)}
-                options={farmOptions}
-                placeholder={`Tất cả nông trường (${farms.length})`}
-                emptyOptionLabel={`Tất cả nông trường (${farms.length})`}
-                heightClass="h-9"
-                icon={<Trees className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Mã lô</label>
-              <SearchableSelect
-                value={filterForm.code}
-                onChange={handleCodeFilterChange}
-                options={codeFilterOptions}
-                placeholder={`Tất cả mã (${plots.length})`}
-                emptyOptionLabel={`Tất cả mã (${plots.length})`}
-                heightClass="h-9"
-                icon={<Grid className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Tên lô</label>
-              <SearchableSelect
-                value={filterForm.name}
-                onChange={handleNameFilterChange}
-                options={nameFilterOptions}
-                placeholder={`Tất cả lô (${plots.length})`}
-                emptyOptionLabel={`Tất cả lô (${plots.length})`}
-                heightClass="h-9"
-                icon={<Grid className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái</label>
-              <SearchableSelect
-                value={filterForm.status}
-                onChange={(val) => setFilterForm({ ...filterForm, status: val })}
-                options={statusOptions}
-                placeholder="Tất cả trạng thái"
-                emptyOptionLabel="Tất cả trạng thái"
-                heightClass="h-9"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 8. Tiêu chí tìm kiếm - Danh mục thửa (Cấp 1: Khu liên hợp -> Cấp 2: Xí nghiệp -> Cấp 3: Nông trường -> Cấp 4: Lô) */}
-        {activeTab === 'danh-muc-thua' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Khu liên hợp</label>
-              <SearchableSelect
-                value={filterForm.complexName}
-                onChange={(val) => handleComplexFilterChange(val)}
-                options={complexOptions}
-                placeholder={`Tất cả KLH (${complexes.length})`}
-                emptyOptionLabel={`Tất cả KLH (${complexes.length})`}
-                heightClass="h-9"
-                icon={<Landmark className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Xí nghiệp</label>
-              <SearchableSelect
-                value={filterForm.enterpriseName}
-                onChange={(val) => handleEnterpriseFilterChange(val)}
-                options={enterpriseOptions}
-                placeholder={`Tất cả XN (${enterprises.length})`}
-                emptyOptionLabel={`Tất cả XN (${enterprises.length})`}
-                heightClass="h-9"
-                icon={<Briefcase className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Nông trường</label>
-              <SearchableSelect
-                value={filterForm.farmName || filterForm.parentName}
-                onChange={(val) => handleFarmFilterChange(val)}
-                options={farmOptions}
-                placeholder={`Tất cả NT (${farms.length})`}
-                emptyOptionLabel={`Tất cả NT (${farms.length})`}
-                heightClass="h-9"
-                icon={<Trees className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Lô</label>
-              <SearchableSelect
-                value={filterForm.plotName}
-                onChange={(val) => handlePlotFilterChange(val)}
-                options={plotOptions}
-                placeholder={`Tất cả Lô (${plots.length})`}
-                emptyOptionLabel={`Tất cả Lô (${plots.length})`}
-                heightClass="h-9"
-                icon={<Grid className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Mã thửa</label>
-              <SearchableSelect
-                value={filterForm.code}
-                onChange={handleCodeFilterChange}
-                options={codeFilterOptions}
-                placeholder={`Tất cả mã (${landParcels.length})`}
-                emptyOptionLabel={`Tất cả mã (${landParcels.length})`}
-                heightClass="h-9"
-                icon={<Grid className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Tên thửa</label>
-              <SearchableSelect
-                value={filterForm.name}
-                onChange={handleNameFilterChange}
-                options={nameFilterOptions}
-                placeholder={`Tất cả thửa (${landParcels.length})`}
-                emptyOptionLabel={`Tất cả thửa (${landParcels.length})`}
-                heightClass="h-9"
-                icon={<Grid className="w-3.5 h-3.5" />}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái thửa</label>
-              <SearchableSelect
-                value={filterForm.plotStatus}
-                onChange={(val) => setFilterForm({ ...filterForm, plotStatus: val })}
-                options={[
-                  { value: 'Đầu tư', label: 'Đầu tư' },
-                  { value: 'Thu hoạch', label: 'Thu hoạch' },
-                  { value: 'Thanh lý', label: 'Thanh lý' },
-                ]}
-                placeholder="Tất cả trạng thái thửa"
-                emptyOptionLabel="Tất cả trạng thái thửa"
-                heightClass="h-9"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Trạng thái</label>
-              <SearchableSelect
-                value={filterForm.status}
-                onChange={(val) => setFilterForm({ ...filterForm, status: val })}
-                options={statusOptions}
-                placeholder="Tất cả trạng thái"
-                emptyOptionLabel="Tất cả trạng thái"
-                heightClass="h-9"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons Toolbar */}
-        <div className="flex items-center flex-wrap gap-2 pt-1 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={handleResetFilter}
-            className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Nhập lại
-          </button>
-          <button
-            type="button"
-            onClick={handleSearch}
-            className="flex items-center gap-1.5 px-4 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-bold shadow-xs transition-colors cursor-pointer"
-          >
-            <Search className="w-3.5 h-3.5" />
-            Tìm kiếm
-          </button>
-
-          {genericCatalogTabs.includes(activeTab as GenericCatalogTabId) && (
-            <>
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2 ml-auto">
               <input
                 ref={genericCatalogFileInputRef}
                 type="file"
@@ -3145,39 +2723,6 @@ export const CommonCatalogsPage: React.FC = () => {
                 className="hidden"
                 onChange={handleUploadGenericCatalog}
               />
-              <button
-                type="button"
-                onClick={handleDownloadActiveTemplate}
-                title={`Tải file mẫu ${catalogTabMeta[activeTab as CatalogTabId].label}`}
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-600" />
-                Download Template
-              </button>
-              <button
-                type="button"
-                onClick={() => genericCatalogFileInputRef.current?.click()}
-                title={`Upload Excel ${catalogTabMeta[activeTab as CatalogTabId].label}`}
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5 text-slate-600" />
-                Upload file
-              </button>
-              <button
-                type="button"
-                onClick={handleExportGenericCatalog}
-                title={`Xuất danh sách ${catalogTabMeta[activeTab as CatalogTabId].label} ra Excel`}
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
-                Xuất excel
-              </button>
-            </>
-          )}
-
-          {activeTab === 'nong-truong' && (
-            <>
-              {/* Hidden file input for Excel upload */}
               <input
                 ref={farmFileInputRef}
                 type="file"
@@ -3185,38 +2730,6 @@ export const CommonCatalogsPage: React.FC = () => {
                 className="hidden"
                 onChange={handleUploadExcelFarms}
               />
-              <button
-                type="button"
-                onClick={handleDownloadTemplateNongTruong}
-                title="Tải file mẫu Excel Nông trường"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-600" />
-                Download Template
-              </button>
-              <button
-                type="button"
-                onClick={() => farmFileInputRef.current?.click()}
-                title="Tải lên tệp tin Excel nông trường"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5 text-slate-600" />
-                Upload file
-              </button>
-              <button
-                type="button"
-                onClick={handleExportExcelFarms}
-                title="Xuất danh sách Nông trường ra Excel"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
-                Xuất excel
-              </button>
-            </>
-          )}
-
-          {activeTab === 'danh-muc-lo' && (
-            <>
               <input
                 ref={plotFileInputRef}
                 type="file"
@@ -3224,38 +2737,6 @@ export const CommonCatalogsPage: React.FC = () => {
                 className="hidden"
                 onChange={handleUploadExcelPlots}
               />
-              <button
-                type="button"
-                onClick={handleDownloadTemplateLo}
-                title="Tải file mẫu Excel Lô"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-600" />
-                Download Template
-              </button>
-              <button
-                type="button"
-                onClick={() => plotFileInputRef.current?.click()}
-                title="Tải lên tệp tin Excel Lô"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5 text-slate-600" />
-                Upload file
-              </button>
-              <button
-                type="button"
-                onClick={handleExportExcelPlots}
-                title="Xuất danh sách Lô ra Excel"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
-                Xuất excel
-              </button>
-            </>
-          )}
-
-          {activeTab === 'danh-muc-thua' && (
-            <>
               <input
                 ref={parcelFileInputRef}
                 type="file"
@@ -3263,39 +2744,85 @@ export const CommonCatalogsPage: React.FC = () => {
                 className="hidden"
                 onChange={handleUploadExcelParcels}
               />
-              <button
-                type="button"
-                onClick={handleDownloadTemplateThua}
-                title="Tải file mẫu Excel Thửa"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-600" />
-                Download Template
-              </button>
-              <button
-                type="button"
-                onClick={() => parcelFileInputRef.current?.click()}
-                title="Tải lên tệp tin Excel Thửa"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5 text-slate-600" />
-                Upload file
-              </button>
-              <button
-                type="button"
-                onClick={handleExportExcelParcels}
-                title="Xuất danh sách Thửa ra Excel"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium shadow-xs transition-colors cursor-pointer"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
-                Xuất excel
-              </button>
-            </>
-          )}
-        </div>
-      </div>
 
-      {/* 1. Tab: Công ty (Screenshot 1) */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs font-bold border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                icon={<RefreshCw className="h-3.5 w-3.5 text-slate-600" />}
+                onClick={() => {
+                  setSearchKeyword('');
+                  setFilterForm(initialFilterState);
+                  setAppliedFilter(initialFilterState);
+                  setCurrentPage(1);
+                }}
+              >
+                Làm mới
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs font-bold border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer shadow-xs"
+                icon={<Download className="h-3.5 w-3.5 text-slate-600" />}
+                onClick={() => {
+                  if (genericCatalogTabs.includes(activeTab as GenericCatalogTabId)) void handleDownloadActiveTemplate();
+                  else if (activeTab === 'nong-truong') void handleDownloadTemplateNongTruong();
+                  else if (activeTab === 'danh-muc-lo') void handleDownloadTemplateLo();
+                  else if (activeTab === 'danh-muc-thua') void handleDownloadTemplateThua();
+                }}
+              >
+                Tải template
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs font-bold border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer shadow-xs"
+                icon={<Upload className="h-3.5 w-3.5 text-slate-600" />}
+                onClick={() => {
+                  if (genericCatalogTabs.includes(activeTab as GenericCatalogTabId)) genericCatalogFileInputRef.current?.click();
+                  else if (activeTab === 'nong-truong') farmFileInputRef.current?.click();
+                  else if (activeTab === 'danh-muc-lo') plotFileInputRef.current?.click();
+                  else if (activeTab === 'danh-muc-thua') parcelFileInputRef.current?.click();
+                }}
+              >
+                Import Excel
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs font-bold border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer shadow-xs"
+                icon={<Download className="h-3.5 w-3.5" />}
+                onClick={() => {
+                  if (genericCatalogTabs.includes(activeTab as GenericCatalogTabId)) {
+                    void handleExportGenericCatalog();
+                  } else if (activeTab === 'nong-truong') {
+                    handleExportExcelFarms();
+                  } else if (activeTab === 'danh-muc-lo') {
+                    handleExportExcelPlots();
+                  } else if (activeTab === 'danh-muc-thua') {
+                    handleExportExcelParcels();
+                  }
+                }}
+              >
+                Xuất file
+              </Button>
+
+              <Button
+                size="sm"
+                className="h-9 text-xs font-bold bg-[#154E2C] hover:bg-[#103d22] text-[#B8D83D] cursor-pointer shadow-xs"
+                icon={<Plus className="h-3.5 w-3.5" />}
+                onClick={handleOpenCreate}
+              >
+                Thêm {tabs.find((t) => t.id === activeTab)?.label.split('/')[0].trim()}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+  {/* 1. Tab: Công ty (Screenshot 1) */}
       {activeTab === 'cong-ty' && (() => {
         const filtered = companies.filter((c) => {
           const matchCode = !appliedFilter.code || c.code.toLowerCase().includes(appliedFilter.code.trim().toLowerCase());
@@ -3317,63 +2844,81 @@ export const CommonCatalogsPage: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-100/80 text-slate-700 border-b border-slate-200 font-bold">
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-12">STT</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Mã</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Tên</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Địa chỉ</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Lĩnh Vực</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Giấy phép KD</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Vốn Điều Lệ</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center">Ngày tạo</th>
-                    <th className="py-2.5 px-3 text-center w-24">Tác vụ</th>
+                  <tr className="bg-slate-50/80 text-slate-700 border-b border-slate-200/80 font-bold">
+                    <th className="py-2.5 px-3 text-center w-12">STT</th>
+                    <th className="py-2.5 px-3">Mã</th>
+                    <th className="py-2.5 px-3">Tên</th>
+                    <th className="py-2.5 px-3">Địa chỉ</th>
+                    <th className="py-2.5 px-3">Lĩnh Vực</th>
+                    <th className="py-2.5 px-3">Giấy phép KD</th>
+                    <th className="py-2.5 px-3">Vốn Điều Lệ</th>
+                    <th className="py-2.5 px-3 text-center w-28">Trạng thái</th>
+                    <th className="py-2.5 px-3 text-center w-16">User</th>
+                    <th className="py-2.5 px-3 text-center w-28">Tác vụ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-100">
                   {paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-400 italic text-xs">
+                      <td colSpan={10} className="py-8 text-center text-slate-400 italic text-xs">
                         Không tìm thấy công ty phù hợp
                       </td>
                     </tr>
                   ) : (
                     paginated.map((c, idx) => (
                       <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-2.5 px-3 text-center font-medium text-slate-600 border-r border-slate-200">
+                        <td className="py-2.5 px-3 text-center font-medium text-slate-600">
                           {startIndex + idx + 1}
                         </td>
-                        <td className="py-2.5 px-3 font-semibold text-emerald-800 border-r border-slate-200 font-mono">
+                        <td className="py-2.5 px-3 font-medium text-slate-900 font-mono">
                           {c.code}
                         </td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-900 border-r border-slate-200">
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">
                           {c.name}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">{c.address}</td>
-                        <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">{c.field}</td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600 border-r border-slate-200">
+                        <td className="py-2.5 px-3 text-slate-700">{c.address}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{c.field}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">
                           {c.businessLicense || '-'}
                         </td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-800 border-r border-slate-200">
+                        <td className="py-2.5 px-3 font-semibold text-slate-800">
                           {c.charterCapital || '-'}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 text-center border-r border-slate-200 font-mono text-[11px]">
-                          {c.createdAt}
-                        </td>
                         <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                          <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                            Hoạt động
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center relative">
+                          <AuditUserPopover
+                            createdDate={c.createdAt}
+                            createdUser="admin"
+                            updatedDate={c.createdAt}
+                            updatedUser="admin"
+                          />
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleOpenEdit(c)}
+                              title="Xem chi tiết"
+                              className="p-1 hover:bg-slate-100 text-slate-700 rounded transition-colors cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={() => handleOpenEdit(c)}
                               title="Sửa công ty"
-                              className="p-1 hover:bg-blue-50 text-blue-600 rounded cursor-pointer"
+                              className="p-1 hover:bg-slate-100 text-slate-700 rounded transition-colors cursor-pointer"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => confirmDelete(c.id, c.name, c.code, 'Công ty')}
                               title="Xóa công ty"
-                              className="p-1 hover:bg-red-50 text-red-600 rounded cursor-pointer"
+                              className="p-1 hover:bg-red-50 text-red-600 rounded transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -3429,22 +2974,22 @@ export const CommonCatalogsPage: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto min-h-[300px]">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-[#f8f9fa] text-slate-800 border-b border-slate-200 font-bold">
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-14">STT</th>
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-28">ID hệ thống</th>
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-28">Mã</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Tên Khu liên hợp</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Địa chỉ trụ sở</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-right w-32">Diện tích (ha)</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-28">Xí nghiệp</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-16">Users</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-28">Trạng thái</th>
+                  <tr className="bg-slate-50/80 text-slate-700 border-b border-slate-200/80 font-bold">
+                    <th className="py-2.5 px-3 text-center w-14">STT</th>
+                    <th className="py-2.5 px-3 text-center w-28">ID hệ thống</th>
+                    <th className="py-2.5 px-3 text-center w-28">Mã</th>
+                    <th className="py-2.5 px-3">Tên Khu liên hợp</th>
+                    <th className="py-2.5 px-3">Địa chỉ trụ sở</th>
+                    <th className="py-2.5 px-3 text-right w-32">Diện tích (ha)</th>
+                    <th className="py-2.5 px-3 text-center w-28">Xí nghiệp</th>
+                    <th className="py-2.5 px-3 text-center w-28">Trạng thái</th>
+                    <th className="py-2.5 px-3 text-center w-16">User</th>
                     <th className="py-2.5 px-3 text-center w-28">Tác vụ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-100">
                   {paginated.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="py-8 text-center text-slate-400 italic text-xs">
@@ -3462,22 +3007,22 @@ export const CommonCatalogsPage: React.FC = () => {
                       return (
                         <React.Fragment key={c.id}>
                           <tr className="hover:bg-slate-50/70 transition-colors">
-                            <td className="py-2.5 px-3 text-center font-medium text-slate-700 border-r border-slate-200">
+                            <td className="py-2.5 px-3 text-center font-medium text-slate-700">
                               {startIndex + idx + 1}
                             </td>
-                            <td className="py-2.5 px-3 text-center text-slate-700 font-mono border-r border-slate-200">
+                            <td className="py-2.5 px-3 text-center text-slate-700 font-mono">
                               {c.systemId || '100026'}
                             </td>
-                            <td className="py-2.5 px-3 text-center font-semibold text-slate-800 font-mono border-r border-slate-200">
+                            <td className="py-2.5 px-3 text-center font-semibold text-slate-800 font-mono">
                               {c.code}
                             </td>
-                            <td className="py-2.5 px-3 text-slate-800 font-medium border-r border-slate-200">
+                            <td className="py-2.5 px-3 text-slate-800 font-medium">
                               {c.name}
                             </td>
-                            <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">
+                            <td className="py-2.5 px-3 text-slate-700">
                               {c.address || (c.code === 'KOUN_MOM' ? 'Huyện Koun Mom, Tỉnh Ratanakiri, Campuchia' : c.code === 'SNOUL' ? 'Huyện Snoul, Tỉnh Kratie, Campuchia' : 'Tỉnh Attapeu, Nước CHDCND Lào')}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-bold text-slate-800 border-r border-slate-200">
+                            <td className="py-2.5 px-3 text-right font-bold text-slate-800">
                               {(() => {
                                 const totalEntArea = Math.round(complexEnterprises.reduce((sum, e) => sum + (e.areaHa || 0), 0) * 1000) / 1000;
                                 // Khu liên hợp lớn hơn các Xí nghiệp con: ĐÚNG (Hợp lệ).
@@ -3518,29 +3063,8 @@ export const CommonCatalogsPage: React.FC = () => {
                                 );
                               })()}
                             </td>
-                            <td className="py-2.5 px-3 text-center border-r border-slate-200 relative">
+                            <td className="py-2.5 px-3 text-center relative">
                               <div className="flex items-center justify-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSearchParams({ tab: 'xi-nghiep' });
-                                    setFilterForm((prev) => ({
-                                      ...prev,
-                                      complexName: c.name,
-                                      parentName: c.name,
-                                    }));
-                                    setAppliedFilter((prev) => ({
-                                      ...prev,
-                                      complexName: c.name,
-                                      parentName: c.name,
-                                    }));
-                                    setCurrentPage(1);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors cursor-pointer"
-                                  title={`Xem ${complexEnterprises.length} xí nghiệp thuộc ${c.name}`}
-                                >
-                                  <span>{complexEnterprises.length} XN</span>
-                                </button>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -3550,10 +3074,10 @@ export const CommonCatalogsPage: React.FC = () => {
                                     );
                                     setEnterpriseSearchKw('');
                                   }}
-                                  title="Xem danh sách Xí nghiệp trực thuộc"
-                                  className="inline-flex items-center justify-center p-1 text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
+                                  className="text-xs font-bold text-slate-900 hover:text-emerald-700 hover:underline cursor-pointer"
+                                  title={`Xem danh sách Xí nghiệp trực thuộc ${c.name}`}
                                 >
-                                  <ExternalLink className="w-4 h-4" />
+                                  {complexEnterprises.length} XN
                                 </button>
                               </div>
 
@@ -3653,117 +3177,7 @@ export const CommonCatalogsPage: React.FC = () => {
                                 </div>
                               )}
                             </td>
-                            <td className="py-2.5 px-3 text-center border-r border-slate-200 relative">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setPopoverEnterpriseComplex(null);
-                                  setPopoverAuditComplex(popoverAuditComplex?.id === c.id ? null : c);
-                                }}
-                                title={`Xem thông tin tạo/sửa của ${c.name}`}
-                                className={`inline-flex items-center justify-center p-1 rounded transition-colors ${
-                                  popoverAuditComplex?.id === c.id
-                                    ? 'border border-slate-800 bg-slate-100 text-slate-900 shadow-xs'
-                                    : 'text-slate-600 hover:text-blue-600'
-                                }`}
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </button>
-
-                              {/* Floating Audit Details Popover Panel (Screenshot) */}
-                              {popoverAuditComplex?.id === c.id && (
-                                <div className="absolute top-9 right-0 z-50 w-[520px] bg-white rounded border border-slate-300 shadow-xl p-3 text-left animate-in fade-in zoom-in-95 duration-150">
-                                  <div className="grid grid-cols-4 gap-2 mb-2 text-xs">
-                                    <div>
-                                      <div className="text-center font-semibold text-slate-700 mb-1">Ngày tạo</div>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        value={c.createdDate || '2026-02-27'}
-                                        className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs"
-                                      />
-                                    </div>
-                                    <div>
-                                      <div className="text-center font-semibold text-slate-700 mb-1">Người tạo</div>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        value={c.createdUser || 'admin'}
-                                        className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs"
-                                      />
-                                    </div>
-                                    <div>
-                                      <div className="text-center font-semibold text-slate-700 mb-1">Ngày sửa</div>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        value={c.updatedDate || '2026-03-14'}
-                                        className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs"
-                                      />
-                                    </div>
-                                    <div>
-                                      <div className="text-center font-semibold text-slate-700 mb-1">Người sửa</div>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        value={c.updatedUser || 'admin'}
-                                        className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-4 gap-2 mb-2 text-xs">
-                                    <div>
-                                      <div className="text-center font-semibold text-slate-700 mb-1">Ngày xác nhận</div>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        value={c.confirmedDate || ''}
-                                        className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs"
-                                      />
-                                    </div>
-                                    <div>
-                                      <div className="text-center font-semibold text-slate-700 mb-1">Người xác nhận</div>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        value={c.confirmedUser || ''}
-                                        className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs"
-                                      />
-                                    </div>
-                                    <div>
-                                      <div className="text-center font-semibold text-slate-700 mb-1">Ngày xóa</div>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        value={c.deletedDate || ''}
-                                        className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs"
-                                      />
-                                    </div>
-                                    <div>
-                                      <div className="text-center font-semibold text-slate-700 mb-1">Người xóa</div>
-                                      <input
-                                        type="text"
-                                        readOnly
-                                        value={c.deletedUser || ''}
-                                        className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="text-right pt-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => setPopoverAuditComplex(null)}
-                                      className="text-xs text-slate-800 hover:text-red-600 font-semibold cursor-pointer"
-                                    >
-                                      Đóng lại
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-center border-r border-slate-200">
+                            <td className="py-2.5 px-3 text-center">
                               <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                                 c.status === 'HOAT_DONG'
                                   ? 'bg-emerald-100 text-emerald-800'
@@ -3771,6 +3185,15 @@ export const CommonCatalogsPage: React.FC = () => {
                               }`}>
                                 {c.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
                               </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center relative">
+                              <AuditUserPopover
+                                createdDate={c.createdDate || '2026-02-27'}
+                                createdUser={c.createdUser || 'admin'}
+                                updatedDate={c.updatedDate || '2026-03-14'}
+                                updatedUser={c.updatedUser || 'admin'}
+                                title={`Xem thông tin tạo/sửa của ${c.name}`}
+                              />
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               <div className="flex items-center justify-center gap-2">
@@ -3801,124 +3224,6 @@ export const CommonCatalogsPage: React.FC = () => {
                         </React.Fragment>
                       );
                     })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {renderPagination(filtered.length)}
-          </div>
-        );
-      })()}
-
-      {/* 2b. Tab: Phòng ban */}
-      {activeTab === 'phong-ban' && (() => {
-        const filtered = departments.filter((d) => {
-          const matchCode = !appliedFilter.code || d.code.toLowerCase().includes(appliedFilter.code.trim().toLowerCase());
-          const matchName = !appliedFilter.name || d.name.toLowerCase().includes(appliedFilter.name.trim().toLowerCase());
-          const matchParent = !appliedFilter.parentName || d.parentName === appliedFilter.parentName;
-          const matchStatus = appliedFilter.status === 'ALL' || d.status === appliedFilter.status;
-          const isMatchSearch =
-            !searchKeyword ||
-            d.name.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-            d.code.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-            (d.managerName && d.managerName.toLowerCase().includes(searchKeyword.toLowerCase())) ||
-            (d.parentName && d.parentName.toLowerCase().includes(searchKeyword.toLowerCase()));
-          return matchCode && matchName && matchParent && matchStatus && isMatchSearch;
-        });
-        const startIndex = (currentPage - 1) * pageSize;
-        const paginated = filtered.slice(startIndex, startIndex + pageSize);
-
-        return (
-          <div className="bg-white rounded border border-slate-200 shadow-xs overflow-hidden font-sans">
-            <div className="px-3.5 py-2.5 border-b border-slate-200 bg-white flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-red-600 uppercase">Phòng ban</span>
-                <button
-                  onClick={handleOpenCreate}
-                  className="flex items-center gap-1 px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-slate-600" />
-                  Tạo mới
-                </button>
-              </div>
-              <span className="text-xs text-slate-500 font-medium">Tổng số: <b>{departments.length}</b> phòng ban</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#f8f9fa] text-slate-800 border-b border-slate-200 font-bold">
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-12">STT</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 w-28">Mã phòng ban</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Tên phòng ban / Tổ chuyên môn</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Đơn vị trực thuộc</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Trưởng phòng / Phụ trách</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Điện thoại</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Chức năng nhiệm vụ</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center">Trạng thái</th>
-                    <th className="py-2.5 px-3 text-center w-24">Tác vụ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {paginated.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-400 italic text-xs">
-                        Không tìm thấy phòng ban phù hợp
-                      </td>
-                    </tr>
-                  ) : (
-                    paginated.map((d, idx) => (
-                      <tr key={d.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-2.5 px-3 text-center font-medium text-slate-600 border-r border-slate-200">
-                          {startIndex + idx + 1}
-                        </td>
-                        <td className="py-2.5 px-3 font-semibold text-emerald-800 border-r border-slate-200 font-mono">
-                          {d.code}
-                        </td>
-                        <td className="py-2.5 px-3 font-bold text-slate-900 border-r border-slate-200">
-                          {d.name}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200 font-medium">
-                          {d.parentName}
-                        </td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-800 border-r border-slate-200">
-                          {d.managerName || '-'}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600 border-r border-slate-200">
-                          {d.phone || '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 border-r border-slate-200 max-w-xs truncate" title={d.description}>
-                          {d.description || '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-center border-r border-slate-200">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                            d.status === 'HOAT_DONG'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-rose-100 text-rose-800'
-                          }`}>
-                            {d.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleOpenEdit(d)}
-                              title="Sửa phòng ban"
-                              className="p-1 hover:bg-blue-50 text-blue-600 rounded cursor-pointer"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => confirmDelete(d.id, d.name, d.code, 'Phòng ban')}
-                              title="Xóa phòng ban"
-                              className="p-1 hover:bg-red-50 text-red-600 rounded cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
                   )}
                 </tbody>
               </table>
@@ -3974,21 +3279,21 @@ export const CommonCatalogsPage: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-[#f8f9fa] text-slate-800 border-b border-slate-200 font-bold">
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-14">STT</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 w-32">Mã XN / Khu vực</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Tên Xí nghiệp / Khu vực</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 w-36">Địa chỉ</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 w-44">Khu liên hợp</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-right w-28">Diện tích (ha)</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-28">Trạng thái</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-16">User</th>
+                  <tr className="bg-slate-50/80 text-slate-700 border-b border-slate-200/80 font-bold">
+                    <th className="py-2.5 px-3 text-center w-14">STT</th>
+                    <th className="py-2.5 px-3 w-32">Mã XN / Khu vực</th>
+                    <th className="py-2.5 px-3">Tên Xí nghiệp / Khu vực</th>
+                    <th className="py-2.5 px-3 w-36">Địa chỉ</th>
+                    <th className="py-2.5 px-3 w-44">Khu liên hợp</th>
+                    <th className="py-2.5 px-3 text-right w-28">Diện tích (ha)</th>
+                    <th className="py-2.5 px-3 text-center w-28">Trạng thái</th>
+                    <th className="py-2.5 px-3 text-center w-16">User</th>
                     <th className="py-2.5 px-3 text-center w-28">Tác vụ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-100">
                   {paginated.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-8 text-center text-slate-400 italic text-xs">
@@ -3998,18 +3303,18 @@ export const CommonCatalogsPage: React.FC = () => {
                   ) : (
                     paginated.map((e, idx) => (
                       <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-2 px-3 text-center font-medium text-slate-700 border-r border-slate-200">
+                        <td className="py-2 px-3 text-center font-medium text-slate-700">
                           {startIndex + idx + 1}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-slate-800 border-r border-slate-200 font-mono">
+                        <td className="py-2 px-3 font-semibold text-slate-800 font-mono">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span>{e.code}</span>
                             {(() => {
                               const reg = e.description || (e.name.includes('DP') ? 'DP' : e.name.includes('LP') ? 'LP' : e.name.includes('AD') ? 'AD' : e.name.includes('BP') ? 'BP' : e.name.includes('BSA') ? 'BSA' : e.name.includes('ERC') ? 'ERC' : e.name.includes('NSA') ? 'NSA' : e.name.includes('NK') ? 'NK' : e.name.includes('PV') ? 'PV' : null);
                               if (reg) {
                                 return (
-                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-sans" title={`Khu vực địa lý viết tắt: ${reg}`}>
-                                    {reg}
+                                  <span className="text-[10px] text-slate-500 font-mono" title={`Khu vực địa lý viết tắt: ${reg}`}>
+                                    ({reg})
                                   </span>
                                 );
                               }
@@ -4017,13 +3322,13 @@ export const CommonCatalogsPage: React.FC = () => {
                             })()}
                           </div>
                         </td>
-                        <td className="py-2 px-3 text-slate-800 font-medium border-r border-slate-200">
+                        <td className="py-2 px-3 text-slate-800 font-medium">
                           {e.name}
                         </td>
-                        <td className="py-2 px-3 text-slate-700 border-r border-slate-200">
+                        <td className="py-2 px-3 text-slate-700">
                           {e.address || ''}
                         </td>
-                        <td className="py-2 px-3 text-slate-800 border-r border-slate-200 font-medium">
+                        <td className="py-2 px-3 text-slate-800 font-medium">
                           {(() => {
                             if (e.parentName && e.parentName.startsWith('Khu liên hợp')) return e.parentName;
                             if (e.parentCode) {
@@ -4043,7 +3348,7 @@ export const CommonCatalogsPage: React.FC = () => {
                             return e.parentName || 'Khu liên hợp Koun Mom';
                           })()}
                         </td>
-                        <td className="py-2 px-3 text-right font-medium text-slate-800 border-r border-slate-200">
+                        <td className="py-2 px-3 text-right font-medium text-slate-800">
                           {(() => {
                             const childFarms = farms.filter((f) => {
                               if (f.parentCode && e.code && f.parentCode.toLowerCase() === e.code.toLowerCase()) return true;
@@ -4091,7 +3396,7 @@ export const CommonCatalogsPage: React.FC = () => {
                             );
                           })()}
                         </td>
-                        <td className="py-2 px-3 text-center border-r border-slate-200">
+                        <td className="py-2 px-3 text-center">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                             e.status === 'HOAT_DONG'
                               ? 'bg-emerald-100 text-emerald-800'
@@ -4100,75 +3405,14 @@ export const CommonCatalogsPage: React.FC = () => {
                             {e.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-center border-r border-slate-200 relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPopoverAuditEnterprise(popoverAuditEnterprise?.id === e.id ? null : e);
-                            }}
+                        <td className="py-2 px-3 text-center relative">
+                          <AuditUserPopover
+                            createdDate={e.createdDate || e.createdAt}
+                            createdUser={e.createdUser || 'admin'}
+                            updatedDate={e.updatedDate}
+                            updatedUser={e.updatedUser || 'admin'}
                             title={`Xem thông tin tạo/sửa của ${e.name}`}
-                            className={`inline-flex items-center justify-center p-1 rounded transition-colors ${
-                              popoverAuditEnterprise?.id === e.id
-                                ? 'border border-slate-800 bg-slate-100 text-slate-900 shadow-xs'
-                                : 'text-slate-600 hover:text-blue-600'
-                            }`}
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </button>
-
-                          {/* Floating Audit Details Popover Panel matching user screenshot */}
-                          {popoverAuditEnterprise?.id === e.id && (
-                            <div className="absolute top-8 right-0 z-50 w-[440px] bg-white rounded border border-slate-300 shadow-xl p-3 text-left animate-in fade-in zoom-in-95 duration-150 font-sans">
-                              <div className="grid grid-cols-4 gap-2 mb-2 text-xs">
-                                <div>
-                                  <div className="text-center font-semibold text-slate-700 mb-1">Ngày tạo</div>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={e.createdDate || e.createdAt || '14-03-2026'}
-                                    className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs font-mono"
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-center font-semibold text-slate-700 mb-1">Người tạo</div>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={e.createdUser || 'admin'}
-                                    className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs font-bold"
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-center font-semibold text-slate-700 mb-1">Ngày sửa</div>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={e.updatedDate || '01-08-2026'}
-                                    className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs font-mono"
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-center font-semibold text-slate-700 mb-1">Người sửa</div>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={e.updatedUser || 'admin'}
-                                    className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs font-bold"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="text-right pt-1 border-t border-slate-100">
-                                <button
-                                  type="button"
-                                  onClick={() => setPopoverAuditEnterprise(null)}
-                                  className="text-xs text-slate-800 hover:text-red-600 font-semibold cursor-pointer"
-                                >
-                                  [ Đóng lại ]
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                          />
                         </td>
                         <td className="py-2 px-3 text-center">
                           <div className="flex items-center justify-center gap-2">
@@ -4261,20 +3505,20 @@ export const CommonCatalogsPage: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-[#f8f9fa] text-slate-800 border-b border-slate-200 font-bold">
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-12">STT</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 w-28">Mã nông trường</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Tên nông trường</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Xí nghiệp</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-24">Diện tích</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-28">Trạng thái</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-16">User</th>
+                  <tr className="bg-slate-50/80 text-slate-700 border-b border-slate-200/80 font-bold">
+                    <th className="py-2.5 px-3 text-center w-12">STT</th>
+                    <th className="py-2.5 px-3 w-28">Mã nông trường</th>
+                    <th className="py-2.5 px-3">Tên nông trường</th>
+                    <th className="py-2.5 px-3">Xí nghiệp</th>
+                    <th className="py-2.5 px-3 text-center w-24">Diện tích</th>
+                    <th className="py-2.5 px-3 text-center w-28">Trạng thái</th>
+                    <th className="py-2.5 px-3 text-center w-16">User</th>
                     <th className="py-2.5 px-3 text-center w-28">Tác vụ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-100">
                   {paginated.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-8 text-center text-slate-400 italic text-xs">
@@ -4294,13 +3538,13 @@ export const CommonCatalogsPage: React.FC = () => {
                             : 'hover:bg-slate-50'
                             }`}
                         >
-                          <td className="py-2.5 px-3 text-center font-medium border-r border-slate-200">
+                          <td className="py-2.5 px-3 text-center font-medium">
                             {startIndex + idx + 1}
                           </td>
-                          <td className="py-2.5 px-3 font-semibold text-emerald-800 border-r border-slate-200 font-mono">
+                          <td className="py-2.5 px-3 font-medium text-slate-900 font-mono">
                             {f.code}
                           </td>
-                          <td className="py-2.5 px-3 border-r border-slate-200 font-medium text-slate-800">
+                          <td className="py-2.5 px-3 font-medium text-slate-800">
                             <div className="flex items-center gap-2">
                               <span>{f.name}</span>
                               {isYellow && (
@@ -4314,11 +3558,11 @@ export const CommonCatalogsPage: React.FC = () => {
                               )}
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-slate-800 border-r border-slate-200">{f.parentName}</td>
-                          <td className="py-2.5 px-3 font-semibold text-center border-r border-slate-200 text-slate-800">
+                          <td className="py-2.5 px-3 text-slate-800">{f.parentName}</td>
+                          <td className="py-2.5 px-3 font-semibold text-center text-slate-800">
                             {f.areaHa ? `${f.areaHa.toLocaleString()} ha` : '-'}
                           </td>
-                          <td className="py-2.5 px-3 text-center border-r border-slate-200">
+                          <td className="py-2.5 px-3 text-center">
                             <span
                               className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${isYellow
                                 ? 'bg-amber-200 text-amber-900 border border-amber-300'
@@ -4330,75 +3574,13 @@ export const CommonCatalogsPage: React.FC = () => {
                               {isYellow ? '⚠️ Quá hạn mức' : f.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
                             </span>
                           </td>
-                        <td className="py-2.5 px-3 text-center border-r border-slate-200 relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPopoverAuditFarm(popoverAuditFarm?.id === f.id ? null : f);
-                            }}
-                            title={`Xem thông tin tạo/sửa của ${f.name}`}
-                            className={`inline-flex items-center justify-center p-1 rounded transition-colors ${
-                              popoverAuditFarm?.id === f.id
-                                ? 'border border-slate-800 bg-slate-100 text-slate-900 shadow-xs'
-                                : 'text-slate-600 hover:text-blue-600'
-                            }`}
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </button>
-
-                          {/* Floating Audit Details Popover Panel */}
-                          {popoverAuditFarm?.id === f.id && (
-                            <div className="absolute top-8 right-0 z-50 w-[440px] bg-white rounded border border-slate-300 shadow-xl p-3 text-left animate-in fade-in zoom-in-95 duration-150 font-sans">
-                              <div className="grid grid-cols-4 gap-2 mb-2 text-xs">
-                                <div>
-                                  <div className="text-center font-semibold text-slate-700 mb-1">Ngày tạo</div>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={f.createdDate || f.createdAt || '14-03-2026'}
-                                    className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs font-mono"
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-center font-semibold text-slate-700 mb-1">Người tạo</div>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={f.createdUser || 'admin'}
-                                    className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs font-bold"
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-center font-semibold text-slate-700 mb-1">Ngày sửa</div>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={f.updatedDate || '01-08-2026'}
-                                    className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs font-mono"
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-center font-semibold text-slate-700 mb-1">Người sửa</div>
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={f.updatedUser || 'admin'}
-                                    className="w-full border border-slate-300 rounded px-2 py-1 text-center bg-white text-slate-700 text-xs font-bold"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="text-right pt-1 border-t border-slate-100">
-                                <button
-                                  type="button"
-                                  onClick={() => setPopoverAuditFarm(null)}
-                                  className="text-xs text-slate-800 hover:text-red-600 font-semibold cursor-pointer"
-                                >
-                                  [ Đóng lại ]
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                        <td className="py-2.5 px-3 text-center relative">
+                          <AuditUserPopover
+                            createdDate={f.createdDate || f.createdAt}
+                            createdUser={f.createdUser || 'admin'}
+                            updatedDate={f.updatedDate}
+                            updatedUser={f.updatedUser || 'admin'}
+                          />
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <div className="flex items-center justify-center gap-2">
@@ -4470,55 +3652,82 @@ export const CommonCatalogsPage: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-[#f8f9fa] text-slate-800 border-b border-slate-200 font-bold">
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-12">STT</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Mã Đội</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Tên Đội</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Phân loại / Đơn vị</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Đội trưởng phụ trách</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Điện thoại</th>
-                    <th className="py-2.5 px-3 text-center w-24">Tác vụ</th>
+                  <tr className="bg-slate-50/80 text-slate-700 border-b border-slate-200/80 font-bold">
+                    <th className="py-2.5 px-3 text-center w-12">STT</th>
+                    <th className="py-2.5 px-3">Mã Đội</th>
+                    <th className="py-2.5 px-3">Tên Đội</th>
+                    <th className="py-2.5 px-3">Phân loại / Đơn vị</th>
+                    <th className="py-2.5 px-3">Đội trưởng phụ trách</th>
+                    <th className="py-2.5 px-3">Điện thoại</th>
+                    <th className="py-2.5 px-3 text-center w-28">Trạng thái</th>
+                    <th className="py-2.5 px-3 text-center w-16">User</th>
+                    <th className="py-2.5 px-3 text-center w-28">Tác vụ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-100">
                   {paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400 italic text-xs">
+                      <td colSpan={9} className="py-8 text-center text-slate-400 italic text-xs">
                         Không tìm thấy đội / tổ phù hợp
                       </td>
                     </tr>
                   ) : (
                     paginated.map((t, idx) => (
                       <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-2.5 px-3 text-center font-medium text-slate-600 border-r border-slate-200">
+                        <td className="py-2.5 px-3 text-center font-medium text-slate-600">
                           {startIndex + idx + 1}
                         </td>
-                        <td className="py-2.5 px-3 font-semibold text-emerald-800 border-r border-slate-200 font-mono">
+                        <td className="py-2.5 px-3 font-medium text-slate-900 font-mono">
                           {t.code}
                         </td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-900 border-r border-slate-200">
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">
                           {t.name}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">
+                        <td className="py-2.5 px-3 text-slate-700">
                           {t.parentName || 'Đội độc lập'}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">{t.managerName || '-'}</td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600 border-r border-slate-200">{t.phone || '-'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{t.managerName || '-'}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">{t.phone || '-'}</td>
                         <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                            t.status === 'HOAT_DONG'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {t.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center relative">
+                          <AuditUserPopover
+                            createdDate="14-03-2026"
+                            createdUser="admin"
+                            updatedDate="01-08-2026"
+                            updatedUser="admin"
+                            title={`Xem thông tin tạo/sửa của ${t.name}`}
+                          />
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleOpenEdit(t)}
+                              title="Xem chi tiết"
+                              className="p-1 hover:bg-slate-100 text-slate-700 rounded transition-colors cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={() => handleOpenEdit(t)}
                               title="Sửa đội"
-                              className="p-1 hover:bg-blue-50 text-blue-600 rounded cursor-pointer"
+                              className="p-1 hover:bg-slate-100 text-slate-700 rounded transition-colors cursor-pointer"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => confirmDelete(t.id, t.name, t.code, 'Đội')}
                               title="Xóa đội"
-                              className="p-1 hover:bg-red-50 text-red-600 rounded cursor-pointer"
+                              className="p-1 hover:bg-red-50 text-red-600 rounded transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -4604,21 +3813,21 @@ export const CommonCatalogsPage: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-[#f8f9fa] text-slate-800 border-b border-slate-200 font-bold">
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-12">STT</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Mã lô</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Tên lô</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Nông trường</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Xi nghiệp</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-right w-24">Diện tích (ha)</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center">Trạng thái</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center">User</th>
+                  <tr className="bg-slate-50/80 text-slate-700 border-b border-slate-200/80 font-bold">
+                    <th className="py-2.5 px-3 text-center w-12">STT</th>
+                    <th className="py-2.5 px-3">Mã lô</th>
+                    <th className="py-2.5 px-3">Tên lô</th>
+                    <th className="py-2.5 px-3">Nông trường</th>
+                    <th className="py-2.5 px-3">Xi nghiệp</th>
+                    <th className="py-2.5 px-3 text-right w-24">Diện tích (ha)</th>
+                    <th className="py-2.5 px-3 text-center">Trạng thái</th>
+                    <th className="py-2.5 px-3 text-center">User</th>
                     <th className="py-2.5 px-3 text-center w-24">Tác vụ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-100">
                   {paginated.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-8 text-center text-slate-400 italic text-xs">
@@ -4648,13 +3857,13 @@ export const CommonCatalogsPage: React.FC = () => {
                             : 'hover:bg-slate-50'
                             }`}
                         >
-                          <td className="py-2.5 px-3 text-center font-medium border-r border-slate-200">
+                          <td className="py-2.5 px-3 text-center font-medium">
                             {startIndex + idx + 1}
                           </td>
-                          <td className="py-2.5 px-3 font-semibold text-emerald-800 border-r border-slate-200 font-mono text-[11px]">
+                          <td className="py-2.5 px-3 font-medium text-slate-900 font-mono text-[11px]">
                             {p.code}
                           </td>
-                          <td className="py-2.5 px-3 border-r border-slate-200">
+                          <td className="py-2.5 px-3">
                             <div className="flex items-center gap-2">
                               <span className="font-medium">{p.name}</span>
                               {isYellow && (
@@ -4668,12 +3877,12 @@ export const CommonCatalogsPage: React.FC = () => {
                               )}
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">{p.parentName || '-'}</td>
-                          <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">{dispEnterprise}</td>
-                          <td className="py-2.5 px-3 font-bold border-r border-slate-200 text-right" title={overInfo?.reason}>
+                          <td className="py-2.5 px-3 text-slate-700">{p.parentName || '-'}</td>
+                          <td className="py-2.5 px-3 text-slate-700">{dispEnterprise}</td>
+                          <td className="py-2.5 px-3 font-bold text-right" title={overInfo?.reason}>
                             {p.areaHa !== undefined ? `${p.areaHa.toLocaleString('vi-VN')} ha` : '-'}
                           </td>
-                          <td className="py-2.5 px-3 text-center border-r border-slate-200">
+                          <td className="py-2.5 px-3 text-center">
                             <span
                               className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${isYellow
                                 ? 'bg-amber-200 text-amber-900 border border-amber-300'
@@ -4685,22 +3894,35 @@ export const CommonCatalogsPage: React.FC = () => {
                               {isYellow ? '⚠️ Quá hạn mức' : p.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 text-center text-slate-500 border-r border-slate-200 text-[11px]">
-                            {p.createdUser || 'admin'}
+                          <td className="py-2.5 px-3 text-center relative">
+                            <AuditUserPopover
+                              createdDate={p.createdDate || (p as any).createdAt}
+                              createdUser={p.createdUser || 'admin'}
+                              updatedDate={p.updatedDate || (p as any).updatedAt}
+                              updatedUser={p.updatedUser || 'admin'}
+                              title={`Xem thông tin tạo/sửa của ${p.name}`}
+                            />
                           </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
+                          <td className="py-2 px-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleOpenEdit(p)}
+                                title="Xem chi tiết"
+                                className="p-1 hover:bg-slate-100 text-slate-700 rounded transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 onClick={() => handleOpenEdit(p)}
                                 title="Sửa lô"
-                                className="p-1 hover:bg-blue-50 text-blue-600 rounded cursor-pointer"
+                                className="p-1 hover:bg-slate-100 text-slate-700 rounded transition-colors cursor-pointer"
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => confirmDelete(p.id, p.name, p.code, 'Danh mục lô')}
                                 title="Xóa lô"
-                                className="p-1 hover:bg-red-50 text-red-600 rounded cursor-pointer"
+                                className="p-1 hover:bg-red-50 text-red-600 rounded transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -4802,23 +4024,23 @@ export const CommonCatalogsPage: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-[#f8f9fa] text-slate-800 border-b border-slate-200 font-bold">
-                    <th className="py-2.5 px-3 text-center border-r border-slate-200 w-12">STT</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Mã thửa</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Tên thửa</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Lô</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Nông trường</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200">Xi nghiệp</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-right w-24">Diện tích (ha)</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center">Trạng thái</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center">Data thửa</th>
-                    <th className="py-2.5 px-3 border-r border-slate-200 text-center">User</th>
+                  <tr className="bg-slate-50/80 text-slate-700 border-b border-slate-200/80 font-bold">
+                    <th className="py-2.5 px-3 text-center w-12">STT</th>
+                    <th className="py-2.5 px-3">Mã thửa</th>
+                    <th className="py-2.5 px-3">Tên thửa</th>
+                    <th className="py-2.5 px-3">Lô</th>
+                    <th className="py-2.5 px-3">Nông trường</th>
+                    <th className="py-2.5 px-3">Xi nghiệp</th>
+                    <th className="py-2.5 px-3 text-right w-24">Diện tích (ha)</th>
+                    <th className="py-2.5 px-3 text-center">Trạng thái</th>
+                    <th className="py-2.5 px-3 text-center">Data thửa</th>
+                    <th className="py-2.5 px-3 text-center">User</th>
                     <th className="py-2.5 px-3 text-center w-24">Tác vụ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-100">
                   {paginated.length === 0 ? (
                     <tr>
                       <td colSpan={11} className="py-8 text-center text-slate-400 italic text-xs">
@@ -4851,13 +4073,13 @@ export const CommonCatalogsPage: React.FC = () => {
                             : 'hover:bg-slate-50'
                             }`}
                         >
-                          <td className="py-2.5 px-3 text-center font-medium border-r border-slate-200">
+                          <td className="py-2.5 px-3 text-center font-medium">
                             {startIndex + idx + 1}
                           </td>
-                          <td className="py-2.5 px-3 font-semibold text-emerald-800 border-r border-slate-200 font-mono text-[11px]">
+                          <td className="py-2.5 px-3 font-medium text-slate-900 font-mono text-[11px]">
                             {p.code}
                           </td>
-                          <td className="py-2.5 px-3 border-r border-slate-200">
+                          <td className="py-2.5 px-3">
                             <div className="flex items-center gap-2">
                               <span className="font-medium">{p.name}</span>
                               {isYellow && (
@@ -4871,13 +4093,13 @@ export const CommonCatalogsPage: React.FC = () => {
                               )}
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">{p.parentName || '-'}</td>
-                          <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">{dispFarm || '-'}</td>
-                          <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200">{dispEnterprise}</td>
-                          <td className="py-2.5 px-3 font-bold border-r border-slate-200 text-right" title={overInfo?.reason}>
+                          <td className="py-2.5 px-3 text-slate-700">{p.parentName || '-'}</td>
+                          <td className="py-2.5 px-3 text-slate-700">{dispFarm || '-'}</td>
+                          <td className="py-2.5 px-3 text-slate-700">{dispEnterprise}</td>
+                          <td className="py-2.5 px-3 font-bold text-right" title={overInfo?.reason}>
                             {p.areaHa !== undefined ? `${p.areaHa.toLocaleString('vi-VN')} ha` : '-'}
                           </td>
-                          <td className="py-2.5 px-3 text-center border-r border-slate-200">
+                          <td className="py-2.5 px-3 text-center">
                             <span
                               className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${isYellow
                                 ? 'bg-amber-200 text-amber-900 border border-amber-300'
@@ -4889,29 +4111,42 @@ export const CommonCatalogsPage: React.FC = () => {
                               {isYellow ? '⚠️ Quá hạn mức' : p.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 text-center border-r border-slate-200">
+                          <td className="py-2.5 px-3 text-center">
                             {p.plotStatus ? (
                               <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
                                 {p.plotStatus}
                               </span>
                             ) : '-'}
                           </td>
-                          <td className="py-2.5 px-3 text-center text-slate-500 border-r border-slate-200 text-[11px]">
-                            {p.createdUser || 'admin'}
+                          <td className="py-2.5 px-3 text-center relative">
+                            <AuditUserPopover
+                              createdDate={p.createdDate || (p as any).createdAt}
+                              createdUser={p.createdUser || 'admin'}
+                              updatedDate={p.updatedDate || (p as any).updatedAt}
+                              updatedUser={p.updatedUser || 'admin'}
+                              title={`Xem thông tin tạo/sửa của ${p.name}`}
+                            />
                           </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
+                          <td className="py-2 px-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleOpenEdit(p)}
+                                title="Xem chi tiết"
+                                className="p-1 hover:bg-slate-100 text-slate-700 rounded transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 onClick={() => handleOpenEdit(p)}
                                 title="Sửa thửa"
-                                className="p-1 hover:bg-blue-50 text-blue-600 rounded cursor-pointer"
+                                className="p-1 hover:bg-slate-100 text-slate-700 rounded transition-colors cursor-pointer"
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => confirmDelete(p.id, p.name, p.code, 'Thửa đất')}
                                 title="Xóa thửa"
-                                className="p-1 hover:bg-red-50 text-red-600 rounded cursor-pointer"
+                                className="p-1 hover:bg-red-50 text-red-600 rounded transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -4930,10 +4165,18 @@ export const CommonCatalogsPage: React.FC = () => {
       })()}
 
 
+            </section>
+
       {/* CREATE / EDIT FORM MODAL */}
       {isFormModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
+          onClick={() => setIsFormModalOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-2xl max-w-xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 cursor-default"
+          >
             <div className="px-6 py-4 bg-emerald-800 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm">
                 {formMode === 'CREATE' ? 'Thêm Mới' : 'Chỉnh Sửa'} {tabs.find((t) => t.id === activeTab)?.label}
@@ -5272,7 +4515,7 @@ export const CommonCatalogsPage: React.FC = () => {
                         {/* Mini table / details of the children list */}
                         {childInfo.childList.length > 0 ? (
                           <div className="max-h-36 overflow-y-auto rounded border border-slate-200 bg-white">
-                            <table className="w-full text-left text-[11px] border-collapse">
+                            <table className="w-full text-left text-[11px]">
                               <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0">
                                 <tr className="border-b border-slate-200">
                                   <th className="py-1 px-2 text-center w-8">#</th>
@@ -5452,8 +4695,17 @@ export const CommonCatalogsPage: React.FC = () => {
 
       {/* DEDICATED SAFE DELETE CONFIRMATION MODAL (CẢNH BÁO XÓA DÀNH CHO ADMIN) */}
       {isDeleteModalOpen && itemToDelete && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-red-200 animate-in zoom-in-95 duration-150">
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150 backdrop-blur-xs cursor-pointer"
+          onClick={() => {
+            setIsDeleteModalOpen(false);
+            setItemToDelete(null);
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-red-200 animate-in zoom-in-95 duration-150 cursor-default"
+          >
             <div className="p-6 text-center space-y-4">
               {/* Pulsing Warning Icon */}
               <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full mx-auto flex items-center justify-center shadow-inner ring-8 ring-red-50">
@@ -5500,14 +4752,14 @@ export const CommonCatalogsPage: React.FC = () => {
                   setIsDeleteModalOpen(false);
                   setItemToDelete(null);
                 }}
-                className="px-4 py-2 border border-slate-300 hover:bg-slate-100 rounded-lg font-semibold text-slate-700 transition-colors"
+                className="px-4 py-2 border border-slate-300 hover:bg-slate-100 rounded-lg font-semibold text-slate-700 transition-colors cursor-pointer"
               >
                 Hủy bỏ (Không xóa)
               </button>
               <button
                 type="button"
                 onClick={handleExecuteDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Đồng ý xóa vĩnh viễn
@@ -5519,8 +4771,14 @@ export const CommonCatalogsPage: React.FC = () => {
 
       {/* 10-MINUTE PERIODIC REMINDER MODAL POPUP */}
       {isPeriodicReminderOpen && totalOverLimitCount > 0 && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border-2 border-amber-500 animate-in zoom-in-95 duration-200">
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 backdrop-blur-xs cursor-pointer"
+          onClick={() => setIsPeriodicReminderOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border-2 border-amber-500 animate-in zoom-in-95 duration-200 cursor-default"
+          >
             <div className="p-6 text-center space-y-4">
               <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full mx-auto flex items-center justify-center shadow-inner ring-8 ring-amber-50">
                 <AlertTriangle className="w-9 h-9 animate-pulse text-amber-600" />

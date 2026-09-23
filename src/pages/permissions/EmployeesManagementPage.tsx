@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { DataTable, Column } from '../../components/data-display/DataTable';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
+import { TableRowActions } from '../../components/common/TableRowActions';
+import { AuditUserPopover } from '../../components/common/AuditUserPopover';
 import { KPIGrid } from '../../components/data-display/KPIGrid';
 import { StatCard } from '../../components/data-display/StatCard';
 import { apiService } from '../../api/client';
@@ -27,6 +30,10 @@ import {
   Loader2,
   SlidersHorizontal,
   X,
+  Smartphone,
+  Shield,
+  Truck,
+  KeyRound,
 } from 'lucide-react';
 
 export interface EmployeeRecord {
@@ -86,38 +93,129 @@ const UNIT_OPTIONS = [
   'NM NHỰA -XỐP DP',
 ];
 
-const POSITION_OPTIONS = [
-  'Đội trưởng Cơ giới Làm đất',
-  'Đội trưởng Cơ giới Thi công',
-  'Quản lý Cơ giới XN Chuối DP1',
-  'Quản lý Cơ giới XN Chuối DP2',
-  'Quản lý Cơ giới XN Chuối DP3',
-  'Quản lý Cơ giới XN Chuối LP1',
-  'Quản lý Cơ giới XN Chuối LP3',
-  'Quản lý Cơ giới Xí nghiệp Bò',
-  'Trưởng Trạm trộn Bê tông',
-  'Chuyên viên Quản lý Xe Công vụ',
-  'Quản lý Cơ giới & Vườn cây Bưởi AD',
-  'Quản lý Cơ giới & Vườn cây Xoài DP',
-  'Phụ trách Ban Cơ điện & Máy bơm tưới',
-  'Phụ trách Giao nhận & Vận tải Tổng kho',
-  'Quản lý Đội xe Nhà máy Nhựa & Xốp',
+export type EmployeeRoleCategory = 'ADMIN' | 'MANAGER' | 'DRIVER';
+
+export const ROLE_GROUPED_POSITIONS = [
+  {
+    role: 'ADMIN' as EmployeeRoleCategory,
+    roleLabel: 'Quản trị viên (Admin)',
+    positions: ['Quản trị viên Hệ thống (Admin)'],
+  },
+  {
+    role: 'MANAGER' as EmployeeRoleCategory,
+    roleLabel: 'Cán bộ quản lý (Manager)',
+    positions: [
+      'Giám đốc Điều hành KLH Koun Mom',
+      'Giám đốc Điều hành KLH Snoul',
+      'Giám đốc Điều hành KLH Nam Lào',
+      'Trưởng ban Điều độ Cơ giới',
+      'Trưởng Trung tâm Bảo dưỡng Sửa chữa',
+      'Thủ kho Xăng dầu & Nhiên liệu',
+      'Đội trưởng Cơ giới Nông trường',
+      'Đội trưởng Cơ giới Thi công Công trình',
+      'Đội trưởng Vận tải Hàng hóa & Logistics',
+    ],
+  },
+  {
+    role: 'DRIVER' as EmployeeRoleCategory,
+    roleLabel: 'Tài xế / Thợ máy (Driver)',
+    positions: [
+      'Thợ lái máy cày xới nông nghiệp',
+      'Thợ vận hành máy kéo Kubota / John Deere',
+      'Thợ máy thu hoạch & bón phân cơ giới',
+      'Thợ lái máy cày bừa phẳng mặt ruộng',
+      'Thợ vận hành máy đào bánh xích gàu 1.2m3',
+      'Thợ lái máy ủi làm đất & san nền',
+      'Thợ vận hành máy lu rung nền đường',
+      'Thợ lái máy san đất mặt bằng',
+      'Thợ vận hành máy xúc lật',
+      'Lái xe đầu kéo Container xuất khẩu',
+      'Lái xe tải ben 10T vận chuyển',
+      'Lái xe tải thùng vận chuyển nông sản',
+      'Lái xe bồn tiếp nhiên liệu lưu động',
+    ],
+  },
 ];
 
+export const POSITION_OPTIONS = ROLE_GROUPED_POSITIONS.flatMap((g) => g.positions);
+
+export function getEmployeeRoleInfo(emp: EmployeeRecord) {
+  const code = (emp.empCode || '').toUpperCase();
+  const pos = (emp.position || '').toLowerCase();
+
+  if (code.startsWith('ADMIN') || pos.includes('quản trị viên') || pos.includes('admin')) {
+    return {
+      roleCategory: 'ADMIN' as const,
+      roleLabel: 'Quản trị viên (Admin)',
+      badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+    };
+  }
+
+  if (
+    code.startsWith('CB-') ||
+    pos.includes('giám đốc') ||
+    pos.includes('trưởng ban') ||
+    pos.includes('trưởng trung tâm') ||
+    pos.includes('thủ kho') ||
+    pos.includes('quản lý') ||
+    pos.includes('đội trưởng')
+  ) {
+    return {
+      roleCategory: 'MANAGER' as const,
+      roleLabel: 'Cán bộ quản lý',
+      badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+    };
+  }
+
+  let subDomain = 'Tài xế cơ giới';
+  const numMatch = code.match(/TX-[A-Z]+-(\d+)/);
+  const num = numMatch ? parseInt(numMatch[1], 10) : 0;
+  if (num > 0 && num <= 30) subDomain = 'Tài xế Nông nghiệp';
+  else if (num > 30 && num <= 60) subDomain = 'Thợ máy Công trình';
+  else if (num > 60) subDomain = 'Lái xe Vận chuyển';
+
+  return {
+    roleCategory: 'DRIVER' as const,
+    roleLabel: subDomain,
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  };
+}
+
 const LICENSE_CLASS_LABELS: Record<string, string> = {
-  BANG_MAY_NONG_NGHIEP: 'Máy Nông Nghiệp',
+  HANG_A: 'Hạng A (Mô tô >125CC)',
+  HANG_B1: 'Hạng B1 (Xe con ≤3.5T, tự động)',
+  HANG_B2: 'Hạng B2 (Máy cày, ô tô con <9 chỗ, tải ≤3.5T)',
   HANG_C: 'Hạng C (Xe tải >3.5T)',
-  HANG_FC: 'Hạng FC (Đầu kéo Container)',
-  HANG_B2: 'Hạng B2 (Xe con / Bán tải)',
-  HANG_D: 'Hạng D (Xe chở người)',
+  HANG_CE: 'Hạng CE (Đầu kéo Container / Rơ-móc)',
+  HANG_D1: 'Hạng D1 (Xe chở người ≤20 chỗ)',
+  HANG_D2: 'Hạng D2 (Xe chở người >20 chỗ)',
 };
 
 const SHORT_LICENSE_LABELS: Record<string, string> = {
-  BANG_MAY_NONG_NGHIEP: 'Máy Nông Nghiệp',
-  HANG_C: 'Hạng C (>3.5T)',
-  HANG_FC: 'Hạng FC (Container)',
+  HANG_A: 'Hạng A',
+  HANG_B1: 'Hạng B1',
   HANG_B2: 'Hạng B2',
-  HANG_D: 'Hạng D',
+  HANG_C: 'Hạng C',
+  HANG_CE: 'Hạng CE',
+  HANG_D1: 'Hạng D1',
+  HANG_D2: 'Hạng D2',
+};
+
+const getCleanKlh = (emp?: {
+  complex?: string | null;
+  businessUnit?: string | null;
+  enterprise?: string | null;
+  farm?: string | null;
+  empCode?: string | null;
+} | null): string => {
+  if (!emp) return 'KLH Koun Mom';
+  const code = (emp.empCode || '').toUpperCase();
+  if (code === 'ADMIN-001') return 'Toàn bộ 3 Khu Liên Hợp';
+  const text = `${emp.complex || ''} ${emp.businessUnit || ''} ${emp.enterprise || ''} ${emp.farm || ''} ${code}`.toUpperCase();
+  if (text.includes('TOÀN') || text.includes('TOAN') || text.includes('VĂN PHÒNG ĐIỀU HÀNH')) return 'Toàn bộ 3 Khu Liên Hợp';
+  if (text.includes('SNOUL') || text.includes('SN-') || text.includes('SN_')) return 'KLH Snoul';
+  if (text.includes('NAM LÀO') || text.includes('NAM LAO') || text.includes('NAMLAO') || text.includes('ATTAPEU') || text.includes('NL-') || text.includes('NL_')) return 'KLH Nam Lào';
+  return 'KLH Koun Mom';
 };
 
 export const EmployeesManagementPage: React.FC = () => {
@@ -137,13 +235,13 @@ export const EmployeesManagementPage: React.FC = () => {
   const [formData, setFormData] = useState({
     empCode: '',
     fullName: '',
-    businessUnit: 'Ban Cơ Giới KLH',
-    complex: 'KOUN_MOM',
-    enterprise: 'Xí nghiệp Cơ giới Daun Penh',
-    farm: '',
+    businessUnit: 'KLH Koun Mom',
+    complex: 'KLH Koun Mom',
+    enterprise: 'KLH Koun Mom',
+    farm: 'KLH Koun Mom',
     team: '',
-    position: 'Đội trưởng Cơ giới Làm đất',
-    licenseClass: 'BANG_MAY_NONG_NGHIEP',
+    position: 'Lái xe cơ giới',
+    licenseClass: 'HANG_B2',
     licenseNumber: '',
     licenseExpiryDate: '2028-12-31',
     healthCheckExpiryDate: '2026-12-31',
@@ -191,7 +289,18 @@ export const EmployeesManagementPage: React.FC = () => {
     setLoading(true);
     try {
       const data = await apiService.getEmployees();
-      setEmployees(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? [...data] : [];
+      // Pin key synced employees and driver profiles at the top
+      const priorityCodes = ['ADMIN-001', 'CB-QL-KM01', 'TX-KM-001', 'TX-SN-001', 'TX-NL-001', 'TX-NT1-001'];
+      list.sort((a: EmployeeRecord, b: EmployeeRecord) => {
+        const idxA = priorityCodes.indexOf(a.empCode);
+        const idxB = priorityCodes.indexOf(b.empCode);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
+      });
+      setEmployees(list);
     } catch (err) {
       console.error('Failed to load employees:', err);
       setEmployees([]);
@@ -210,17 +319,38 @@ export const EmployeesManagementPage: React.FC = () => {
         const query = searchName.toLowerCase().trim();
         const matchName = emp.fullName?.toLowerCase().includes(query);
         const matchCode = emp.empCode?.toLowerCase().includes(query);
-        if (!matchName && !matchCode) return false;
+        const matchPhone = emp.phone?.toLowerCase().includes(query);
+        const matchIdCard = emp.idCardNumber?.toLowerCase().includes(query);
+        const matchLicense = emp.licenseNumber?.toLowerCase().includes(query);
+        if (!matchName && !matchCode && !matchPhone && !matchIdCard && !matchLicense) return false;
       }
       if (searchPhone.trim()) {
         const query = searchPhone.toLowerCase().trim();
         if (!emp.phone?.toLowerCase().includes(query)) return false;
       }
-      if (selectedUnit !== ALL && emp.businessUnit !== selectedUnit && emp.enterprise !== selectedUnit) {
-        return false;
+      if (selectedUnit !== ALL) {
+        const klh = getCleanKlh(emp);
+        if (selectedUnit === 'KOUN_MOM' && klh !== 'KLH Koun Mom' && klh !== 'Toàn bộ 3 Khu Liên Hợp') return false;
+        if (selectedUnit === 'SNOUL' && klh !== 'KLH Snoul' && klh !== 'Toàn bộ 3 Khu Liên Hợp') return false;
+        if (selectedUnit === 'NAM_LAO' && klh !== 'KLH Nam Lào' && klh !== 'Toàn bộ 3 Khu Liên Hợp') return false;
       }
-      if (selectedPosition !== ALL && emp.position !== selectedPosition) {
-        return false;
+      if (selectedPosition !== ALL) {
+        const roleInfo = getEmployeeRoleInfo(emp);
+        if (selectedPosition === 'ROLE_ADMIN') {
+          if (roleInfo.roleCategory !== 'ADMIN') return false;
+        } else if (selectedPosition === 'ROLE_MANAGER') {
+          if (roleInfo.roleCategory !== 'MANAGER') return false;
+        } else if (selectedPosition === 'ROLE_DRIVER') {
+          if (roleInfo.roleCategory !== 'DRIVER') return false;
+        } else if (selectedPosition === 'ROLE_DRIVER_AGRI') {
+          if (roleInfo.roleLabel !== 'Tài xế Nông nghiệp') return false;
+        } else if (selectedPosition === 'ROLE_DRIVER_CONSTR') {
+          if (roleInfo.roleLabel !== 'Thợ máy Công trình') return false;
+        } else if (selectedPosition === 'ROLE_DRIVER_TRANS') {
+          if (roleInfo.roleLabel !== 'Lái xe Vận chuyển') return false;
+        } else {
+          if (emp.position !== selectedPosition) return false;
+        }
       }
       if (selectedLicense !== ALL && emp.licenseClass !== selectedLicense) {
         return false;
@@ -240,15 +370,15 @@ export const EmployeesManagementPage: React.FC = () => {
   const handleOpenCreate = () => {
     setEditingItem(null);
     setFormData({
-      empCode: `THA-KM-${String(employees.length + 1).padStart(3, '0')}`,
+      empCode: `TX-KM-${String(employees.length + 1).padStart(3, '0')}`,
       fullName: '',
-      businessUnit: 'Ban Cơ Giới KLH',
-      complex: 'KOUN_MOM',
-      enterprise: 'Xí nghiệp Cơ giới Daun Penh',
+      businessUnit: 'KLH Koun Mom',
+      complex: 'KLH Koun Mom',
+      enterprise: 'KLH Koun Mom',
       farm: 'Đội Cơ giới Làm đất',
       team: 'Tổ Vận hành Cơ giới',
       position: 'Đội trưởng Cơ giới Làm đất',
-      licenseClass: 'BANG_MAY_NONG_NGHIEP',
+      licenseClass: 'HANG_B2',
       licenseNumber: '',
       licenseExpiryDate: '2028-12-31',
       healthCheckExpiryDate: '2026-12-31',
@@ -276,13 +406,13 @@ export const EmployeesManagementPage: React.FC = () => {
     setFormData({
       empCode: emp.empCode || '',
       fullName: emp.fullName || '',
-      businessUnit: emp.businessUnit || 'Ban Cơ Giới KLH',
-      complex: emp.complex || 'KOUN_MOM',
-      enterprise: emp.enterprise || '',
+      businessUnit: emp.businessUnit || 'KLH Koun Mom',
+      complex: emp.complex || 'KLH Koun Mom',
+      enterprise: emp.enterprise || 'KLH Koun Mom',
       farm: emp.farm || '',
       team: emp.team || '',
       position: emp.position || '',
-      licenseClass: emp.licenseClass || 'BANG_MAY_NONG_NGHIEP',
+      licenseClass: emp.licenseClass || 'HANG_B2',
       licenseNumber: emp.licenseNumber || '',
       licenseExpiryDate: emp.licenseExpiryDate || '2028-12-31',
       healthCheckExpiryDate: emp.healthCheckExpiryDate || '2026-12-31',
@@ -352,66 +482,87 @@ export const EmployeesManagementPage: React.FC = () => {
       width: '160px',
       render: (row) => (
         <div>
-          <span className="font-bold text-slate-900 text-xs block hover:text-emerald-700 transition-colors">
+          <span className="font-semibold text-slate-900 text-xs block">
             {row.fullName}
           </span>
-          <span className="font-mono text-[10px] text-slate-400 font-bold">{row.empCode}</span>
+          <span className="font-mono text-[11px] text-slate-500">{row.empCode}</span>
         </div>
       ),
       filterElement: (
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchName}
-            onChange={(e) => setSearchName(e.target.value)}
-            placeholder="Lọc tên/mã..."
-            className="h-7 w-full rounded border border-slate-300 bg-white pl-6 pr-1.5 text-[11px] text-slate-800 outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
-          />
-        </div>
+        <input
+          type="text"
+          value={searchName}
+          onChange={(e) => setSearchName(e.target.value)}
+          placeholder="Lọc tên/mã..."
+          className="h-7 w-full rounded border border-slate-300 bg-white px-1.5 text-[11px] text-slate-800 outline-none focus:border-slate-500"
+        />
       ),
     },
     {
       key: 'position',
-      title: 'CHỨC DANH / VỊ TRÍ',
+      title: 'VAI TRÒ & CHỨC DANH',
       sortable: true,
-      width: '210px',
-      render: (row) => (
-        <span className="text-xs font-semibold text-slate-800">
-          {row.position || 'Quản lý cơ giới'}
-        </span>
-      ),
+      width: '230px',
+      render: (row) => {
+        const roleInfo = getEmployeeRoleInfo(row);
+        return (
+          <div className="space-y-1">
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${roleInfo.badgeClass}`}
+            >
+              {roleInfo.roleCategory === 'ADMIN' && <Shield className="w-3 h-3" />}
+              {roleInfo.roleCategory === 'MANAGER' && <UserCheck className="w-3 h-3" />}
+              {roleInfo.roleCategory === 'DRIVER' && <Truck className="w-3 h-3" />}
+              {roleInfo.roleLabel}
+            </span>
+            <div className="text-xs text-slate-800 font-medium line-clamp-2">
+              {row.position ||
+                (roleInfo.roleCategory === 'ADMIN'
+                  ? 'Quản trị viên Hệ thống'
+                  : roleInfo.roleCategory === 'MANAGER'
+                  ? 'Cán bộ điều hành cơ giới'
+                  : 'Lái xe cơ giới')}
+            </div>
+          </div>
+        );
+      },
       filterElement: (
         <select
           value={selectedPosition}
           onChange={(e) => setSelectedPosition(e.target.value)}
-          className="h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] text-slate-800 outline-none focus:border-emerald-600"
+          className="h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] font-medium text-slate-800 outline-none focus:border-slate-500"
         >
-          <option value={ALL}>Tất cả chức danh</option>
-          {POSITION_OPTIONS.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
+          <option value={ALL}>Tất cả vai trò & chức danh</option>
+          <optgroup label="── THEO VAI TRÒ HỆ THỐNG ──">
+            <option value="ROLE_ADMIN">★ Quản trị viên (Admin)</option>
+            <option value="ROLE_MANAGER">★ Cán bộ quản lý (Manager)</option>
+            <option value="ROLE_DRIVER">★ Tài xế / Thợ máy (Tất cả)</option>
+            <option value="ROLE_DRIVER_AGRI">&nbsp;&nbsp;&nbsp;&nbsp;↳ Tài xế Nông nghiệp</option>
+            <option value="ROLE_DRIVER_CONSTR">&nbsp;&nbsp;&nbsp;&nbsp;↳ Thợ máy Công trình</option>
+            <option value="ROLE_DRIVER_TRANS">&nbsp;&nbsp;&nbsp;&nbsp;↳ Lái xe Vận chuyển</option>
+          </optgroup>
+          <optgroup label="── THEO CHỨC DANH CỤ THỂ ──">
+            {POSITION_OPTIONS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </optgroup>
         </select>
       ),
     },
     {
       key: 'businessUnit',
-      title: 'ĐƠN VỊ & NƠI TẬP KẾT',
+      title: 'KHU LIÊN HỢP PHỤ TRÁCH',
       sortable: true,
-      width: '200px',
+      width: '180px',
       render: (row) => (
-        <div className="space-y-0.5">
-          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
-            <Building2 className="h-3 w-3 text-emerald-600 shrink-0" />
-            {row.enterprise || row.businessUnit}
-          </span>
-          {row.farm && (
-            <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium">
-              <MapPin className="h-2.5 w-2.5 text-slate-400 shrink-0" />
-              <span>{row.farm}</span>
-            </div>
+        <div className="text-xs text-slate-800">
+          <span className="font-semibold">{getCleanKlh(row)}</span>
+          {row.enterprise && (
+            <span className="block text-[11px] text-slate-500 font-medium">
+              {row.enterprise}
+            </span>
           )}
         </div>
       ),
@@ -419,14 +570,12 @@ export const EmployeesManagementPage: React.FC = () => {
         <select
           value={selectedUnit}
           onChange={(e) => setSelectedUnit(e.target.value)}
-          className="h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] text-slate-800 outline-none focus:border-emerald-600"
+          className="h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] text-slate-800 outline-none focus:border-slate-500"
         >
-          <option value={ALL}>Tất cả đơn vị</option>
-          {UNIT_OPTIONS.map((u) => (
-            <option key={u} value={u}>
-              {u}
-            </option>
-          ))}
+          <option value={ALL}>Tất cả Khu liên hợp</option>
+          <option value="KOUN_MOM">KLH Koun Mom</option>
+          <option value="SNOUL">KLH Snoul</option>
+          <option value="NAM_LAO">KLH Nam Lào</option>
         </select>
       ),
     },
@@ -435,10 +584,9 @@ export const EmployeesManagementPage: React.FC = () => {
       title: 'SỐ ZALO / SĐT',
       width: '120px',
       render: (row) => (
-        <div className="flex items-center gap-1 font-mono text-xs font-bold text-emerald-800">
-          <Phone className="h-3 w-3 text-emerald-600 shrink-0" />
-          <span>{row.phone || '—'}</span>
-        </div>
+        <span className="font-mono text-xs text-slate-800">
+          {row.phone || '—'}
+        </span>
       ),
       filterElement: (
         <input
@@ -446,7 +594,7 @@ export const EmployeesManagementPage: React.FC = () => {
           value={searchPhone}
           onChange={(e) => setSearchPhone(e.target.value)}
           placeholder="Lọc SĐT..."
-          className="h-7 w-full rounded border border-slate-300 bg-white px-1.5 text-[11px] font-mono text-slate-800 outline-none focus:border-emerald-600"
+          className="h-7 w-full rounded border border-slate-300 bg-white px-1.5 text-[11px] font-mono text-slate-800 outline-none focus:border-slate-500"
         />
       ),
     },
@@ -454,22 +602,24 @@ export const EmployeesManagementPage: React.FC = () => {
       key: 'licenseClass',
       title: 'GIẤY PHÉP LÁI XE',
       width: '160px',
-      render: (row) => (
-        <div className="space-y-0.5">
-          <span className="inline-block rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-800 border border-sky-200">
-            <Award className="h-3 w-3 text-sky-600 inline mr-0.5" />
-            {SHORT_LICENSE_LABELS[row.licenseClass || ''] || row.licenseClass || 'Máy Nông Nghiệp'}
-          </span>
-          <div className="text-[10px] text-amber-700 font-bold font-mono">
-            Hạn: {row.licenseExpiryDate || '2028-12-31'}
+      render: (row) => {
+        if (!row.licenseClass && !row.licenseNumber) {
+          return <span className="text-xs text-slate-400 italic">Không có GPLX</span>;
+        }
+        return (
+          <div className="text-xs text-slate-800 space-y-0.5">
+            <div className="font-medium">{SHORT_LICENSE_LABELS[row.licenseClass || ''] || row.licenseClass || 'GPLX'}</div>
+            <div className="text-[11px] text-slate-500 font-mono">
+              {row.licenseExpiryDate ? `Hạn: ${row.licenseExpiryDate}` : 'Chưa cập nhật hạn'}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
       filterElement: (
         <select
           value={selectedLicense}
           onChange={(e) => setSelectedLicense(e.target.value)}
-          className="h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] text-slate-800 outline-none focus:border-emerald-600"
+          className="h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] text-slate-800 outline-none focus:border-slate-500"
         >
           <option value={ALL}>Tất cả bằng</option>
           {Object.entries(SHORT_LICENSE_LABELS).map(([k, v]) => (
@@ -481,14 +631,54 @@ export const EmployeesManagementPage: React.FC = () => {
       ),
     },
     {
+      key: 'username',
+      title: 'TÀI KHOẢN & PHÂN QUYỀN',
+      width: '200px',
+      render: (row) => {
+        const isAdmin = row.empCode === 'ADMIN-001' || row.position?.toLowerCase().includes('admin');
+        const isDriver =
+          row.empCode?.startsWith('TX-') ||
+          row.empCode?.includes('TX') ||
+          Boolean(row.licenseClass) ||
+          row.position?.toLowerCase().includes('lái xe') ||
+          row.position?.toLowerCase().includes('vận hành');
+
+        if (!row.username) {
+          return (
+            <div className="space-y-0.5">
+              <span className="text-xs text-slate-400 italic block">Chưa cấp tài khoản</span>
+              <span className="text-[10px] text-slate-400 block">
+                {isAdmin ? 'Quản trị viên' : isDriver ? 'Tài xế / Lái máy' : 'Nhân sự'}
+              </span>
+            </div>
+          );
+        }
+
+        const roleLabel = isAdmin
+          ? 'Quản trị (Web toàn quyền)'
+          : isDriver
+          ? 'Chỉ App Mobile (Chặn Web)'
+          : 'Nhân sự quản lý (Web KLH)';
+
+        return (
+          <div className="space-y-0.5">
+            <span className="font-mono text-xs font-semibold text-slate-900 block">
+              {row.username}
+            </span>
+            <span className="text-[11px] text-emerald-700 font-medium block">
+              {roleLabel}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
       key: 'status',
-      title: 'TRẠNG THÁI',
+      title: 'Trạng thái',
       sortable: true,
-      align: 'center',
       width: '110px',
       render: (row) => (
-        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        <span className="text-xs text-slate-800">
           {row.status || 'Đang làm việc'}
         </span>
       ),
@@ -496,7 +686,7 @@ export const EmployeesManagementPage: React.FC = () => {
         <select
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
-          className="h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] text-slate-800 outline-none focus:border-emerald-600"
+          className="h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] text-slate-800 outline-none focus:border-slate-500"
         >
           <option value={ALL}>Tất cả</option>
           <option value="Đang làm việc">Đang làm việc</option>
@@ -505,49 +695,46 @@ export const EmployeesManagementPage: React.FC = () => {
       ),
     },
     {
-      key: 'id',
-      title: 'THAO TÁC',
+      key: 'user',
+      title: 'User',
       align: 'center',
-      width: '90px',
+      width: '70px',
       render: (row) => (
-        <div className="flex items-center justify-center gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedEmployee(row);
-              setDetailTab('info');
-            }}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-emerald-700 transition-colors"
-            title="Xem lý lịch"
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOpenEdit(row)}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-primary transition-colors"
-            title="Sửa thông tin"
-          >
-            <Edit className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDelete(row.id, row.fullName)}
-            className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-            title="Xóa"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <AuditUserPopover
+          createdDate={row.createdAt ? new Date(row.createdAt).toLocaleDateString('vi-VN') : '—'}
+          createdUser="admin"
+          updatedDate={row.updatedAt ? new Date(row.updatedAt).toLocaleDateString('vi-VN') : '—'}
+          updatedUser="admin"
+          title={`Xem thông tin tạo/sửa của ${row.fullName}`}
+        />
+      ),
+    },
+    {
+      key: 'id',
+      title: 'Tác vụ',
+      align: 'center',
+      width: '110px',
+      render: (row) => (
+        <TableRowActions
+          onView={() => {
+            setSelectedEmployee(row);
+            setDetailTab('info');
+          }}
+          onEdit={() => handleOpenEdit(row)}
+          onDelete={() => handleDelete(row.id, row.fullName)}
+          viewTitle="Xem lý lịch"
+          editTitle="Sửa thông tin"
+          deleteTitle="Xóa nhân viên"
+        />
       ),
       filterElement: hasActiveFilters ? (
         <button
           type="button"
           onClick={resetFilters}
-          className="inline-flex items-center justify-center gap-1 rounded bg-rose-50 px-1.5 py-1 text-[10px] font-bold text-rose-700 hover:bg-rose-100 border border-rose-200 w-full transition-colors"
+          className="inline-flex items-center justify-center rounded bg-slate-100 px-1.5 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-200 border border-slate-300 w-full transition-colors"
           title="Xóa toàn bộ lọc cột"
         >
-          <RotateCcw className="h-3 w-3" /> Đặt lại
+          Đặt lại
         </button>
       ) : null,
     },
@@ -555,6 +742,52 @@ export const EmployeesManagementPage: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* 1. THANH ĐIỀU HƯỚNG PHÂN HỆ PHÂN QUYỀN */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/phan-quyen/nhan-vien"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white shadow-xs"
+          >
+            <Users className="h-4 w-4" />
+            <span>Hồ sơ Nhân sự & Vai trò</span>
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-black">
+              {employees.length}
+            </span>
+          </Link>
+
+          <Link
+            to="/phan-quyen/nguoi-dung"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            <KeyRound className="h-4 w-4 text-slate-500" />
+            <span>Người dùng & Tài khoản</span>
+          </Link>
+
+          <Link
+            to="/phan-quyen/vai-tro"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            <Shield className="h-4 w-4 text-slate-500" />
+            <span>Vai trò & Ma trận quyền</span>
+          </Link>
+        </div>
+
+        <div className="hidden lg:flex items-center gap-3 pr-2 text-xs text-slate-500 font-medium">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-purple-500" />
+            Admin: 1
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            Quản lý: 6
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Tài xế / Thợ máy: 300
+          </span>
+        </div>
+      </div>
 
 
       {/* 2. STATS OVERVIEW CARDS */}
@@ -710,19 +943,29 @@ export const EmployeesManagementPage: React.FC = () => {
 
             <div>
               <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                Chức danh / Vị trí ({POSITION_OPTIONS.length} vị trí)
+                Vai trò & Chức danh
               </label>
               <select
                 value={selectedPosition}
                 onChange={(e) => setSelectedPosition(e.target.value)}
                 className="h-8.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-bold text-slate-800 outline-none focus:border-primary focus:bg-white"
               >
-                <option value={ALL}>Tất cả chức danh</option>
-                {POSITION_OPTIONS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
+                <option value={ALL}>Tất cả vai trò & chức danh</option>
+                <optgroup label="── THEO VAI TRÒ HỆ THỐNG ──">
+                  <option value="ROLE_ADMIN">★ Quản trị viên (Admin)</option>
+                  <option value="ROLE_MANAGER">★ Cán bộ quản lý (Manager)</option>
+                  <option value="ROLE_DRIVER">★ Tài xế / Thợ máy (Tất cả)</option>
+                  <option value="ROLE_DRIVER_AGRI">&nbsp;&nbsp;&nbsp;&nbsp;↳ Tài xế Nông nghiệp</option>
+                  <option value="ROLE_DRIVER_CONSTR">&nbsp;&nbsp;&nbsp;&nbsp;↳ Thợ máy Công trình</option>
+                  <option value="ROLE_DRIVER_TRANS">&nbsp;&nbsp;&nbsp;&nbsp;↳ Lái xe Vận chuyển</option>
+                </optgroup>
+                <optgroup label="── THEO CHỨC DANH CỤ THỂ ──">
+                  {POSITION_OPTIONS.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
@@ -780,6 +1023,7 @@ export const EmployeesManagementPage: React.FC = () => {
           isLoading={loading}
           pageSize={20}
           showSearch={false}
+          useGlobalFilters={false}
         />
       </section>
 
@@ -891,19 +1135,19 @@ export const EmployeesManagementPage: React.FC = () => {
               {detailTab === 'unit' && (
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Khu liên hợp</span>
-                    <span className="font-bold text-slate-900 text-xs">KLH Koun Mom (Campuchia)</span>
+                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Khu liên hợp phụ trách</span>
+                    <span className="font-bold text-slate-900 text-xs">{getCleanKlh(selectedEmployee)}</span>
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Đơn vị / Xí nghiệp</span>
+                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Đơn vị công tác</span>
                     <span className="font-bold text-emerald-800 text-xs">
-                      {selectedEmployee.enterprise || selectedEmployee.businessUnit || 'Ban Cơ Giới KLH'}
+                      {getCleanKlh(selectedEmployee)}
                     </span>
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Đội / Nông trường</span>
+                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Đội ngũ vận hành</span>
                     <span className="font-semibold text-slate-900 text-xs">
-                      {selectedEmployee.farm || selectedEmployee.team || '—'}
+                      {selectedEmployee.team ? selectedEmployee.team.replace(/NT[12]|Ban Cơ Giới/gi, 'KLH') : 'Đội xe KLH'}
                     </span>
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
@@ -1067,37 +1311,41 @@ export const EmployeesManagementPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">Đơn vị / Xí nghiệp: *</label>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Khu liên hợp phụ trách: *</label>
                 <select
-                  value={formData.enterprise}
+                  value={formData.complex}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      enterprise: e.target.value,
+                      complex: e.target.value,
                       businessUnit: e.target.value,
+                      enterprise: e.target.value,
                     })
                   }
                   className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-800 outline-none focus:border-primary focus:bg-white"
                 >
-                  {UNIT_OPTIONS.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
+                  <option value="KLH Koun Mom">KLH Koun Mom (Campuchia)</option>
+                  <option value="KLH Snoul">KLH Snoul (Campuchia)</option>
+                  <option value="KLH Nam Lào">KLH Nam Lào (Lào)</option>
+                  <option value="Toàn bộ 3 Khu Liên Hợp">Toàn bộ 3 Khu Liên Hợp</option>
                 </select>
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">Chức danh / Vị trí: *</label>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Vai trò & Chức danh: *</label>
                 <select
                   value={formData.position}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                   className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-800 outline-none focus:border-primary focus:bg-white"
                 >
-                  {POSITION_OPTIONS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
+                  {ROLE_GROUPED_POSITIONS.map((group) => (
+                    <optgroup key={group.role} label={`── ${group.roleLabel.toUpperCase()} ──`}>
+                      {group.positions.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>

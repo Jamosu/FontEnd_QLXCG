@@ -15,7 +15,7 @@ import {
   ChevronsRight,
   Briefcase,
 } from 'lucide-react';
-import { CatalogItem, mockPositions } from '../../data/catalogData';
+import { CatalogItem } from '../../data/catalogData';
 import { catalogsApi } from '../../api/catalogsApi';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
 import { getStoredData } from '../../utils/storage';
@@ -23,6 +23,10 @@ import {
   exportGenericCatalogWorkbook,
   parseGenericCatalogWorkbook,
 } from '../../utils/catalogExcel';
+import { Button } from '../../components/common/Button';
+import { TableRowActions } from '../../components/common/TableRowActions';
+import { StatusToggle } from '../../components/common/StatusToggle';
+import { AuditUserPopover } from '../../components/common/AuditUserPopover';
 
 const STORAGE_KEY = 'catalogs_positions';
 
@@ -31,8 +35,9 @@ export const PositionsCatalogPage: React.FC = () => {
   // 1. STATE & DATA INITIALIZATION
   // --------------------------------------------------------------------------
   const [positions, setPositions] = useState<CatalogItem[]>(() =>
-    getStoredData(STORAGE_KEY, mockPositions)
+    getStoredData(STORAGE_KEY, [])
   );
+  const [viewingItem, setViewingItem] = useState<CatalogItem | null>(null);
 
   // Search Filter form state (temporary until "Tìm kiếm" is pressed)
   const [filterForm, setFilterForm] = useState({
@@ -70,7 +75,7 @@ export const PositionsCatalogPage: React.FC = () => {
   // --------------------------------------------------------------------------
   const loadPositions = async () => {
     try {
-      const data = await catalogsApi.getCatalogs('POSITION', STORAGE_KEY, mockPositions);
+      const data = await catalogsApi.getCatalogs('POSITION', STORAGE_KEY);
       if (Array.isArray(data) && data.length > 0) {
         setPositions(data);
       }
@@ -125,16 +130,16 @@ export const PositionsCatalogPage: React.FC = () => {
 
   const filteredPositions = useMemo(() => {
     return positions.filter((p) => {
-      const matchCode =
-        !appliedFilter.code ||
-        p.code?.toLowerCase().includes(appliedFilter.code.trim().toLowerCase());
-      const matchName =
-        !appliedFilter.name ||
-        p.name?.toLowerCase().includes(appliedFilter.name.trim().toLowerCase());
+      const q = (appliedFilter.name || appliedFilter.code || '').trim().toLowerCase();
+      const matchText =
+        !q ||
+        p.code?.toLowerCase().includes(q) ||
+        p.name?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q);
       const matchStatus =
         appliedFilter.status === 'ALL' || p.status === appliedFilter.status;
 
-      return matchCode && matchName && matchStatus;
+      return matchText && matchStatus;
     });
   }, [positions, appliedFilter]);
 
@@ -368,171 +373,138 @@ export const PositionsCatalogPage: React.FC = () => {
   // 7. RENDER
   // --------------------------------------------------------------------------
   return (
-    <div className="p-4 sm:p-6 space-y-4 bg-slate-50/60 min-h-screen">
-      {/* ===================================================================== */}
-      {/* 1. TIÊU CHÍ TÌM KIẾM (SEARCH CRITERIA PANEL)                          */}
-      {/* ===================================================================== */}
-      <div
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSearch();
-        }}
-        className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-3 font-sans text-xs"
-      >
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-bold text-red-600 uppercase tracking-wide">
-            Tiêu chí tìm kiếm
-          </div>
-          <span className="text-[11px] text-slate-400 italic">
-            Chọn tiêu chí và bấm "Tìm kiếm" (hoặc nhấn Enter)
-          </span>
-        </div>
+    <div className="space-y-4 font-sans">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-4 font-sans">
+        {/* Action & Context Filter Toolbar: Hàng trên là Bộ lọc xếp đều, Hàng dưới là Cụm nút tác vụ */}
+        <div className="space-y-3 border-b border-slate-100 pb-3">
+          {/* HÀNG TRÊN: BỘ LỌC (XẾP ĐỀU GRID FULL WIDTH) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Search Input */}
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-800 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                value={filterForm.name || filterForm.code}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterForm((prev) => ({ ...prev, name: val, code: val }));
+                  setAppliedFilter((prev) => ({ ...prev, name: val, code: val }));
+                  setCurrentPage(1);
+                }}
+                placeholder="Tìm kiếm trong danh mục..."
+              />
+            </div>
 
-        {/* Filter Input Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          <div>
-            <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-              Mã chức danh
-            </label>
+            {/* Trạng thái SearchableSelect */}
             <SearchableSelect
-              value={filterForm.code}
-              onChange={(val) => setFilterForm({ ...filterForm, code: val })}
-              options={codeOptions}
-              placeholder={`Tất cả mã (${positions.length})`}
-              emptyOptionLabel={`Tất cả mã (${positions.length})`}
+              className="w-full"
               heightClass="h-9"
-              icon={<Briefcase className="w-3.5 h-3.5" />}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-              Tên chức danh
-            </label>
-            <SearchableSelect
-              value={filterForm.name}
-              onChange={(val) => setFilterForm({ ...filterForm, name: val })}
-              options={nameOptions}
-              placeholder={`Tất cả chức danh (${positions.length})`}
-              emptyOptionLabel={`Tất cả chức danh (${positions.length})`}
-              heightClass="h-9"
-              icon={<Briefcase className="w-3.5 h-3.5" />}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-              Trạng thái
-            </label>
-            <SearchableSelect
-              value={filterForm.status}
-              onChange={(val) => setFilterForm({ ...filterForm, status: val || 'ALL' })}
-              options={statusOptions}
-              placeholder="Tất cả trạng thái"
+              roundedClass="rounded-xl"
+              bgClass="bg-white"
               emptyOptionLabel="Tất cả trạng thái"
-              heightClass="h-9"
+              emptyValue="ALL"
+              value={filterForm.status || 'ALL'}
+              onChange={(val) => {
+                setFilterForm((prev) => ({ ...prev, status: val }));
+                setAppliedFilter((prev) => ({ ...prev, status: val }));
+                setCurrentPage(1);
+              }}
+              options={[
+                { value: 'HOAT_DONG', label: 'Còn hoạt động' },
+                { value: 'TAM_DUNG', label: 'Ngưng hoạt động' },
+              ]}
             />
           </div>
-        </div>
 
-        {/* Action Buttons Toolbar */}
-        <div className="flex items-center flex-wrap gap-2 pt-1 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-            <span>Nhập lại</span>
-          </button>
+          {/* HÀNG DƯỚI: CÁC NÚT TÁC VỤ */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-100/80">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">
+                Danh mục: <b className="text-slate-800 font-bold">Chức danh tài xế</b>
+                <span className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                  {filteredPositions.length} chức danh
+                </span>
+              </span>
+            </div>
 
-          <button
-            type="button"
-            onClick={handleSearch}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <Search className="w-3.5 h-3.5" />
-            <span>Tìm kiếm</span>
-          </button>
+            <div className="flex flex-wrap items-center gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs font-bold border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                icon={<RotateCcw className="h-3.5 w-3.5 text-slate-600" />}
+                onClick={handleReset}
+              >
+                Làm mới
+              </Button>
 
-          <button
-            type="button"
-            onClick={handleDownloadTemplate}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
-            <span>Download Template</span>
-          </button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs font-bold border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer shadow-xs"
+                icon={<Download className="h-3.5 w-3.5" />}
+                onClick={handleExportExcel}
+              >
+                Xuất file
+              </Button>
 
-          <label className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer m-0">
-            <Upload className="w-3.5 h-3.5 text-slate-600" />
-            <span>Upload file</span>
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleUploadFile}
-              className="hidden"
-            />
-          </label>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs font-bold border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer shadow-xs"
+                icon={<Download className="h-3.5 w-3.5 text-slate-500" />}
+                onClick={handleDownloadTemplate}
+              >
+                Template
+              </Button>
 
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Xuất excel</span>
-          </button>
-        </div>
-      </div>
+              <label className="flex items-center gap-1.5 h-9 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold shadow-xs cursor-pointer m-0">
+                <Upload className="w-3.5 h-3.5 text-slate-600" />
+                <span>Upload</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleUploadFile}
+                  className="hidden"
+                />
+              </label>
 
-      {/* ===================================================================== */}
-      {/* 2. BẢNG DỮ LIỆU CHỨC DANH (DATA TABLE PANEL)                         */}
-      {/* ===================================================================== */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden font-sans">
-        {/* Table Card Header */}
-        <div className="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-red-600 uppercase tracking-wide">
-              Chức danh
-            </span>
-            <button
-              onClick={handleOpenCreate}
-              className="flex items-center gap-1 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Tạo mới</span>
-            </button>
+              <Button
+                size="sm"
+                className="h-9 text-xs font-bold bg-[#154E2C] hover:bg-[#124225] text-[#B8D83D] cursor-pointer shadow-xs"
+                icon={<Plus className="h-3.5 w-3.5" />}
+                onClick={handleOpenCreate}
+              >
+                Thêm chức danh
+              </Button>
+            </div>
           </div>
-
-          <span className="text-xs text-slate-500 font-medium">
-            Tổng số: <b>{filteredPositions.length}</b> chức danh
-          </span>
         </div>
 
         {/* Table Grid */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto rounded-xl border border-slate-100">
+          <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-[#f8f9fa] text-slate-800 border-b border-slate-200 font-bold text-[11px] uppercase tracking-wider">
-                <th className="py-2.5 px-3 text-center border-r border-slate-200 w-12">
+              <tr className="bg-slate-50/80 text-slate-700 border-b border-slate-200/80 font-bold text-[11px] uppercase tracking-wider">
+                <th className="py-2.5 px-3 text-center w-12">
                   STT
                 </th>
-                <th className="py-2.5 px-3 border-r border-slate-200 w-44">
+                <th className="py-2.5 px-3 w-44">
                   Mã chức danh
                 </th>
-                <th className="py-2.5 px-3 border-r border-slate-200 w-64">
+                <th className="py-2.5 px-3 w-64">
                   Tên chức danh
                 </th>
-                <th className="py-2.5 px-3 border-r border-slate-200">
+                <th className="py-2.5 px-3">
                   Mô tả nhiệm vụ & Chức năng
                 </th>
-                <th className="py-2.5 px-3 border-r border-slate-200 w-28">
-                  Ngày tạo
-                </th>
-                <th className="py-2.5 px-3 border-r border-slate-200 text-center w-28">
+                <th className="py-2.5 px-3 text-center w-28">
                   Trạng thái
                 </th>
-                <th className="py-2.5 px-3 text-center w-24">
+                <th className="py-2.5 px-3 text-center w-16">
+                  User
+                </th>
+                <th className="py-2.5 px-3 text-center w-28">
                   Tác vụ
                 </th>
               </tr>
@@ -550,49 +522,47 @@ export const PositionsCatalogPage: React.FC = () => {
                     key={pos.id}
                     className="hover:bg-slate-50/80 transition-colors"
                   >
-                    <td className="py-2.5 px-3 text-center border-r border-slate-200 font-mono text-slate-500">
+                    <td className="py-2.5 px-3 text-center font-mono text-slate-500">
                       {startIndex + idx + 1}
                     </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 font-mono font-bold text-emerald-800">
+                    <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">
                       {pos.code}
                     </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 font-semibold text-slate-900">
+                    <td className="py-2.5 px-3 font-semibold text-slate-900">
                       {pos.name}
                     </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 text-slate-600">
+                    <td className="py-2.5 px-3 text-slate-600">
                       {pos.description || '—'}
                     </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 text-slate-500 font-mono text-[11px]">
-                      {pos.createdAt || pos.createdDate || '10-01-2026'}
-                    </td>
-                    <td className="py-2.5 px-3 border-r border-slate-200 text-center">
+                    <td className="py-2.5 px-3 text-center">
                       <span
-                        className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
                           pos.status === 'HOAT_DONG'
                             ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-slate-100 text-slate-600'
+                            : 'bg-rose-100 text-rose-800'
                         }`}
                       >
-                        {pos.status === 'HOAT_DONG' ? 'Hoạt động' : 'Tạm dừng'}
+                        {pos.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => handleOpenEdit(pos)}
-                          title="Xem/Sửa"
-                          className="p-1 hover:bg-slate-100 text-blue-600 rounded transition-colors cursor-pointer"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(pos)}
-                          title="Xóa"
-                          className="p-1 hover:bg-red-50 text-red-600 rounded transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                    <td className="py-2.5 px-3 text-center relative">
+                      <AuditUserPopover
+                        createdDate={(pos as any).createdAt || pos.createdDate || '14-03-2026'}
+                        createdUser={pos.createdUser || 'admin'}
+                        updatedDate={(pos as any).updatedAt || pos.updatedDate || '01-08-2026'}
+                        updatedUser={pos.updatedUser || 'admin'}
+                        title={`Xem thông tin tạo/sửa của ${pos.name}`}
+                      />
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <TableRowActions
+                        onView={() => setViewingItem(pos)}
+                        onEdit={() => handleOpenEdit(pos)}
+                        onDelete={() => handleDelete(pos)}
+                        viewTitle="Xem chi tiết"
+                        editTitle="Sửa chức danh"
+                        deleteTitle="Xóa chức danh"
+                      />
                     </td>
                   </tr>
                 ))
@@ -693,14 +663,20 @@ export const PositionsCatalogPage: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* ===================================================================== */}
       {/* 3. MODAL CREATE / EDIT FORM                                          */}
       {/* ===================================================================== */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 cursor-default"
+          >
             <div className="px-6 py-4 bg-emerald-800 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm">
                 {formMode === 'CREATE' ? 'Thêm Mới Chức Danh' : 'Chỉnh Sửa Chức Danh'}
@@ -766,24 +742,19 @@ export const PositionsCatalogPage: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Trạng thái
-                </label>
-                <select
-                  value={formData.status || 'HOAT_DONG'}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      status: e.target.value as 'HOAT_DONG' | 'TAM_DUNG',
-                    })
-                  }
-                  className="w-full border border-slate-300 rounded p-2 focus:border-emerald-600 focus:outline-none bg-white font-medium text-xs"
-                >
-                  <option value="HOAT_DONG">Hoạt động</option>
-                  <option value="TAM_DUNG">Tạm dừng</option>
-                </select>
-              </div>
+              <StatusToggle
+                value={formData.status || 'HOAT_DONG'}
+                onChange={(status) =>
+                  setFormData({
+                    ...formData,
+                    status: status as 'HOAT_DONG' | 'TAM_DUNG',
+                  })
+                }
+                activeValue="HOAT_DONG"
+                inactiveValue="TAM_DUNG"
+                activeLabel="Hoạt động"
+                inactiveLabel="Không hoạt động"
+              />
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -801,6 +772,79 @@ export const PositionsCatalogPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XEM CHI TIẾT CHỨC DANH */}
+      {viewingItem && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div className="px-6 py-4 bg-emerald-800 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm">Chi Tiết Chức Danh</h3>
+              <button
+                onClick={() => setViewingItem(null)}
+                className="text-emerald-200 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-xs font-sans">
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Mã chức danh</span>
+                  <span className="font-mono font-bold text-emerald-800 text-sm">{viewingItem.code}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Tên chức danh</span>
+                  <span className="font-bold text-slate-800 text-sm">{viewingItem.name}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Ngày tạo</span>
+                  <span className="font-mono text-slate-700">{viewingItem.createdAt || viewingItem.createdDate || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Trạng thái</span>
+                  <span
+                    className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      viewingItem.status === 'HOAT_DONG'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {viewingItem.status === 'HOAT_DONG' ? 'Hoạt động' : 'Không hoạt động'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block text-[11px] mb-1">Mô tả nhiệm vụ & Chức năng</span>
+                <div className="p-3 rounded-lg border border-slate-200 bg-white text-slate-700 min-h-[60px] leading-relaxed">
+                  {viewingItem.description || 'Chưa có mô tả nhiệm vụ công việc.'}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setViewingItem(null)}
+                  className="px-4 py-2 border border-slate-300 rounded text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const item = viewingItem;
+                    setViewingItem(null);
+                    handleOpenEdit(item);
+                  }}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-semibold shadow-xs transition-colors cursor-pointer"
+                >
+                  Chỉnh sửa
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
