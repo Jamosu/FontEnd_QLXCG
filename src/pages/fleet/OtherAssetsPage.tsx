@@ -198,6 +198,7 @@ export const OtherAssetsPage: React.FC = () => {
 
   // Global Complex
   const globalKLH = useAppStore((s) => s.selectedKLH);
+  const isAreaManager = useAppStore((s) => s.currentUser?.role === 'FARM_MANAGER');
   const [selectedComplex, setSelectedComplex] = useState(globalKLH || ALL);
   const [selectedRegion, setSelectedRegion] = useState(ALL);
   const { units: managementFilterUnits, managers: managementFilterManagers } = useManagementFilterCatalog(
@@ -1062,6 +1063,7 @@ export const OtherAssetsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/doi-xe/phan-xe')}
+          style={{ display: isAreaManager ? 'none' : undefined }}
           className="relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer border-slate-200 bg-white hover:bg-slate-50"
         >
           <span className="absolute inset-x-0 bottom-0 h-1.5 bg-amber-500" />

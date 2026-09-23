@@ -4,6 +4,7 @@ import { MainLayout } from './layouts/MainLayout';
 import { unifiedSchedulingEnabled } from './config/features';
 import { LoginPage } from './pages/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { useAppStore } from './store/useAppStore';
 import { apiClient, getSessionToken } from './api/client';
 import { connectOperationalRealtime } from './realtime/operationalRealtime';
 import { WORKSHOP_ROUTES } from './config/workshopRoutes';
@@ -92,6 +93,7 @@ import { UnitPermissionsPage } from './pages/permissions/UnitPermissionsPage';
 import { AuditLogsPage } from './pages/permissions/AuditLogsPage';
 
 export const App: React.FC = () => {
+  const isAreaManager = useAppStore((state) => state.currentUser?.role === 'FARM_MANAGER');
   useEffect(() => {
     const marker = 'thaco_plan_dispatch_api_migration_v1';
     if (!localStorage.getItem(marker)) {
@@ -165,7 +167,7 @@ export const App: React.FC = () => {
           {/* Module C: Fleet */}
           <Route path="doi-xe/ho-so-xe" element={<VehiclesPage assetScope="FLEET" />} />
           <Route path="doi-xe/thiet-bi" element={<EquipmentPage />} />
-          <Route path="doi-xe/phan-xe" element={<UnitAssignmentPage />} />
+          <Route path="doi-xe/phan-xe" element={isAreaManager ? <Navigate to="/doi-xe/ho-so-xe" replace /> : <UnitAssignmentPage />} />
           <Route path="doi-xe/gps-cam-bien" element={<GPSSensorsPage />} />
           <Route path="doi-xe/lich-su" element={<FleetHistoryPage />} />
           <Route path="doi-xe/quan-li-sos" element={<SosManagementPage />} />

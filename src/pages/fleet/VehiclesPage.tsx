@@ -201,6 +201,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ assetScope = 'FLEET'
 
   // Global KLH from Header Filter
   const globalKLH = useAppStore((state) => state.selectedKLH);
+  const isAreaManager = useAppStore((state) => state.currentUser?.role === 'FARM_MANAGER');
 
   // Filter state is sent to MySQL through GET /api/vehicles.
   const [selectedComplex, setSelectedComplex] = useState(globalKLH || ALL);
@@ -1783,6 +1784,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ assetScope = 'FLEET'
         <button
           type="button"
           onClick={() => navigate('/doi-xe/phan-xe')}
+          style={{ display: isAreaManager ? 'none' : undefined }}
           className="relative overflow-hidden p-4 rounded-2xl border text-left transition-all hover:shadow-md cursor-pointer border-slate-200 bg-white hover:bg-slate-50"
         >
           <span className="absolute inset-x-0 bottom-0 h-1.5 bg-amber-500" />
